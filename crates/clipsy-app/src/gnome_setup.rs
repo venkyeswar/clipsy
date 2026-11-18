@@ -22,23 +22,34 @@ fn still_needed(state: &State) -> bool {
     state.backend.borrow().setup_needed() == Some(SetupNeeded::GnomeExtension)
 }
 
+/// Turns the extension on. `gnome-extensions enable` only works for extensions
+/// GNOME has already loaded, and a new one loads only at the next login, so this
+/// adds the UUID to the enabled list in GSettings directly (once, keeping the rest).
+fn enable_command(uuid: &str) -> String {
+    format!(
+        "gsettings set org.gnome.shell disable-user-extensions false && \
+gsettings set org.gnome.shell enabled-extensions \"$(gsettings get org.gnome.shell enabled-extensions | \
+sed -E \"/'{uuid}'/!{{s/^@as \\[\\]$/[]/; s/\\]$/, '{uuid}']/; s/^\\[, /[/}}\")\""
+    )
+}
+
 /// The terminal command for this kind of install, plus an optional hint line.
 fn command() -> (String, Option<&'static str>) {
     let uuid = GNOME_EXTENSION_UUID;
+    let enable = enable_command(uuid);
     if std::env::var_os("SNAP").is_some() {
         let cmd = format!(
-            "gnome-extensions install --force /snap/clipsy/current/share/clipsy/{uuid}.zip && gnome-extensions enable {uuid}"
+            "gnome-extensions install --force /snap/clipsy/current/share/clipsy/{uuid}.zip && {enable}"
         );
         (cmd, None)
     } else if Path::new(SYSTEM_EXTENSION_DIR).join(uuid).exists() {
-        (format!("gnome-extensions enable {uuid}"), None)
+        (enable, None)
     } else {
-        let cmd = format!(
-            "gnome-extensions install --force {uuid}.zip && gnome-extensions enable {uuid}"
-        );
+        let cmd = format!("gnome-extensions install --force {uuid}.zip && {enable}");
         (cmd, Some("Get the zip from github.com/venkyeswar/clipsy/releases"))
     }
 }
+
 
 fn dim_label(text: &str) -> gtk::Label {
     let label = gtk::Label::new(Some(text));
@@ -186,4 +197,44 @@ pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
     });
 
     Some(outer.upcast())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::enable_command;
+
+    /// Runs the generated command against a fake `gsettings` and checks the result.
+    #[test]
+    fn enable_command_appends_once() {
+        let uuid = "clipsy@venkyeswar.github.io";
+        for (before, after) in [
+            ("@as []", format!("['{uuid}']")),
+            ("['a@b']", format!("['a@b', '{uuid}']")),
+            (&*format!("['{uuid}', 'a@b']"), format!("['{uuid}', 'a@b']")),
+        ] {
+            let dir = std::env::temp_dir().join(format!("clipsy-gs-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let fake = dir.join("gsettings");
+            let out = dir.join("out");
+            std::fs::write(
+                &fake,
+                format!(
+                    "#!/bin/sh\nif [ \"$1\" = get ]; then echo \"{before}\"; elif [ \"$3\" = enabled-extensions ]; then printf %s \"$4\" > '{}'; fi\n",
+                    out.display()
+                ),
+            )
+            .unwrap();
+            std::process::Command::new("chmod").arg("+x").arg(&fake).status().unwrap();
+            let path = format!("{}:{}", dir.display(), std::env::var("PATH").unwrap_or_default());
+            let status = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(enable_command(uuid))
+                .env("PATH", path)
+                .status()
+                .unwrap();
+            assert!(status.success());
+            assert_eq!(std::fs::read_to_string(&out).unwrap(), after);
+            std::fs::remove_dir_all(&dir).ok();
+        }
+    }
 }

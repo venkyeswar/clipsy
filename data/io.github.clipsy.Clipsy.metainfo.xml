@@ -40,6 +40,11 @@
     <keyword>pin</keyword>
   </keywords>
   <releases>
+    <release version="0.2.1" date="2026-11-19">
+      <description>
+        <p>Fixes the setup command for the GNOME extension, which could fail with "does not exist" before logging out.</p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-11-18">
       <description>
         <ul>

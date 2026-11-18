@@ -13,6 +13,11 @@ network connections. The protocol is described in `docs/gnome-protocol.md`.
 ## Manual install
 
     cp -r clipsy@venkyeswar.github.io ~/.local/share/gnome-shell/extensions/
+
+Then log out and back in so GNOME Shell loads it, and run:
+
     gnome-extensions enable clipsy@venkyeswar.github.io
 
-On Wayland, log out and back in first so GNOME Shell notices the new extension.
+(`gnome-extensions enable` fails with "does not exist" until GNOME has loaded the
+extension. Clipsy's setup card shows a single command that works before logging
+out, by adding the UUID to `org.gnome.shell enabled-extensions` directly.)

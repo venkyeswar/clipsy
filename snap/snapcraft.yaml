@@ -67,3 +67,18 @@ parts:
       mkdir -p "$CRAFT_PART_INSTALL/share/clipsy"
       cd "$CRAFT_PART_SRC"
       zip -r "$CRAFT_PART_INSTALL/share/clipsy/clipsy@venkyeswar.github.io.zip" metadata.json extension.js
+
+  # Two keys of GNOME Shell's settings (enabled-extensions and
+  # disable-user-extensions), so Clipsy can turn its extension on from inside the
+  # snap, which does not include GNOME Shell's own schema. Ends up compiled in
+  # /snap/clipsy/current/share/clipsy/schemas.
+  shell-keys-schema:
+    plugin: nil
+    source: data/schemas
+    build-packages:
+      - libglib2.0-bin
+    override-build: |
+      dest="$CRAFT_PART_INSTALL/share/clipsy/schemas"
+      mkdir -p "$dest"
+      cp io.github.clipsy.ShellKeys.gschema.xml "$dest/"
+      glib-compile-schemas --strict "$dest"

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Two keys of GNOME Shell's own settings (org.gnome.shell, path /org/gnome/shell/).
+  The snap runtime does not ship GNOME Shell's schema, so Clipsy carries this
+  copy of the two keys it needs to turn its GNOME extension on. It reads and
+  writes the same settings as GNOME Shell.
+-->
+<schemalist>
+  <schema id="io.github.clipsy.ShellKeys" path="/org/gnome/shell/">
+    <key name="enabled-extensions" type="as">
+      <default>[]</default>
+    </key>
+    <key name="disable-user-extensions" type="b">
+      <default>false</default>
+    </key>
+  </schema>
+</schemalist>

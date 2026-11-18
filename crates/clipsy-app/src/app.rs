@@ -15,7 +15,7 @@ use clipsy_core::{ClipEvent, Config, Store};
 use gtk::{gio, glib};
 
 use crate::popup::Popup;
-use crate::{autostart, settings, welcome};
+use crate::{autostart, gnome_install, settings, welcome};
 
 /// Everything the windows share. Only touched from the GTK main thread.
 ///
@@ -111,16 +111,31 @@ fn start(app: &adw::Application) -> anyhow::Result<()> {
 
     // The backend can start fine and still need the user to turn on the GNOME
     // extension. Give it a few seconds to connect, then remind the user once.
+    // On GNOME Wayland, install or update the extension files and turn the
+    // extension on after a first install, so the user does not need a Terminal.
+    let auto_setup = if state.backend.borrow().name() == "gnome" {
+        let outcome = gnome_install::auto_setup();
+        tracing::info!("GNOME extension setup: {outcome:?}");
+        Some(outcome)
+    } else {
+        None
+    };
     if state.backend.borrow().setup_needed() == Some(SetupNeeded::GnomeExtension) {
         let (app, state) = (app.clone(), state.clone());
         glib::timeout_add_local_once(std::time::Duration::from_secs(6), move || {
-            if state.backend.borrow().setup_needed() == Some(SetupNeeded::GnomeExtension) {
-                notify(
-                    &app,
-                    "Finish setting up Clipsy",
-                    "Turn on the Clipsy GNOME extension to record your clipboard on Wayland. Open Clipsy for the steps.",
-                );
+            if state.backend.borrow().setup_needed() != Some(SetupNeeded::GnomeExtension) {
+                return;
             }
+            let body = match (auto_setup, gnome_install::status()) {
+                (_, gnome_install::Status::Enabled) => {
+                    "Log out and log back in once to finish setting up Clipsy on Wayland."
+                }
+                (_, gnome_install::Status::Disabled) => {
+                    "The Clipsy GNOME extension is turned off. Open Clipsy to turn it on."
+                }
+                _ => "Turn on the Clipsy GNOME extension to record your clipboard on Wayland. Open Clipsy for the steps.",
+            };
+            notify(&app, "Finish setting up Clipsy", body);
         });
     }
 

@@ -1,7 +1,9 @@
-//! The "One more step for Wayland" box. On GNOME with Wayland the Clipsy GNOME
-//! extension does the clipboard watching and the shortcuts, so the user has to
-//! turn it on once. The welcome window and Settings both show this box until the
-//! extension has connected.
+//! The Wayland setup box. On GNOME with Wayland the Clipsy GNOME extension does
+//! the clipboard watching and the shortcuts. Clipsy installs and turns it on by
+//! itself where it can (see `gnome_install`); this box then only asks the user to
+//! log out and back in once. It shows a "Turn on" button when the extension is
+//! installed but off, and the Terminal command only when Clipsy could not
+//! install it. The welcome window and Settings show it until the extension connects.
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -13,6 +15,7 @@ use clipsy_backends::{SetupNeeded, GNOME_EXTENSION_UUID};
 use gtk::glib;
 
 use crate::app::State;
+use crate::gnome_install::{self, Status};
 
 /// Where a package install puts the extension.
 const SYSTEM_EXTENSION_DIR: &str = "/usr/share/gnome-shell/extensions";
@@ -62,20 +65,10 @@ fn dim_label(text: &str) -> gtk::Label {
     label
 }
 
-/// Builds the setup box, or returns None when no setup is needed.
-pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
-    if !still_needed(state) {
-        return None;
-    }
+/// The Terminal command and the log-out step, for when Clipsy could not install
+/// the extension itself.
+fn command_steps(root: &gtk::Box) {
     let (cmd, hint) = command();
-
-    let title = gtk::Label::new(Some("One more step for Wayland"));
-    title.add_css_class("heading");
-    title.set_xalign(0.0);
-
-    let intro = dim_label(
-        "On GNOME with Wayland, Clipsy needs its small GNOME extension to see what you copy and to use the shortcut.",
-    );
 
     // Step 1: the command and a Copy button.
     let step1 = gtk::Label::new(Some("1. Copy this command, paste it in a Terminal (Ctrl+Alt+T) and press Enter"));
@@ -126,10 +119,81 @@ pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
     let step2_note = dim_label("GNOME turns on new extensions only at login. Clipsy then connects by itself.");
     step2_note.add_css_class("caption");
 
+    root.append(&step1);
+    root.append(&cmd_row);
+    if let Some(hint) = hint {
+        let hint = dim_label(hint);
+        hint.add_css_class("caption");
+        root.append(&hint);
+    }
+    root.append(&step2);
+    root.append(&step2_note);
+}
+
+/// Builds the setup box, or returns None when no setup is needed.
+pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
+    if !still_needed(state) {
+        return None;
+    }
+    let root = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    let heading = |text: &str| {
+        let title = gtk::Label::new(Some(text));
+        title.add_css_class("heading");
+        title.set_xalign(0.0);
+        title.set_wrap(true);
+        title
+    };
+    match gnome_install::status() {
+        // Installed and on: GNOME starts it at the next login.
+        Status::Enabled => {
+            root.append(&heading("Almost ready"));
+            root.append(&dim_label(
+                "Clipsy has set up its small GNOME extension. Log out and log back in once to finish. GNOME turns on new extensions only at login.",
+            ));
+        }
+        // Installed but turned off (for example by the user): one click turns it on.
+        Status::Disabled => {
+            root.append(&heading("Turn on the Clipsy extension"));
+            root.append(&dim_label(
+                "Clipsy's small GNOME extension is installed but turned off. Clipsy needs it on Wayland to see what you copy and to use the shortcut.",
+            ));
+            let button = gtk::Button::with_label("Turn on");
+            button.add_css_class("suggested-action");
+            button.add_css_class("pill");
+            button.set_halign(gtk::Align::Start);
+            let result = dim_label("");
+            result.add_css_class("caption");
+            result.set_visible(false);
+            {
+                let result = result.clone();
+                button.connect_clicked(move |button| {
+                    match gnome_install::enable() {
+                        Ok(()) => {
+                            button.set_visible(false);
+                            result.set_text("Turned on. Clipsy connects in a few seconds. If it does not, log out and log back in.");
+                        }
+                        Err(err) => result.set_text(&format!("Could not turn it on: {err:#}")),
+                    }
+                    result.set_visible(true);
+                });
+            }
+            root.append(&button);
+            root.append(&result);
+        }
+        // Clipsy could not install it: show the Terminal command.
+        Status::Missing => {
+            root.append(&heading("One more step for Wayland"));
+            root.append(&dim_label(
+                "On GNOME with Wayland, Clipsy needs its small GNOME extension to see what you copy and to use the shortcut.",
+            ));
+            command_steps(&root);
+        }
+    }
+
     // Live status: waiting, then a green check.
     let spinner = gtk::Spinner::new();
     spinner.start();
-    let waiting = dim_label("Waiting for the extension. This changes to Connected after you log back in.");
+    let waiting = dim_label("Waiting for the extension to connect...");
     waiting.add_css_class("caption");
     let waiting_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     waiting_row.append(&spinner);
@@ -143,18 +207,6 @@ pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
     done_row.append(&done_text);
     done_row.set_visible(false);
 
-    let root = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    root.append(&title);
-    root.append(&intro);
-    root.append(&step1);
-    root.append(&cmd_row);
-    if let Some(hint) = hint {
-        let hint = dim_label(hint);
-        hint.add_css_class("caption");
-        root.append(&hint);
-    }
-    root.append(&step2);
-    root.append(&step2_note);
     root.append(&waiting_row);
     root.append(&done_row);
 

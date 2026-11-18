@@ -6,6 +6,9 @@
 //! - Any later run (`clipsy toggle`, `clipsy settings`, ...) is forwarded to the
 //!   running instance over GApplication's D-Bus connection. The running instance
 //!   then performs that command as an app action.
+//! - Inside a strictly confined snap, owning a D-Bus name needs a store review, so
+//!   there the app runs "non-unique" and uses a private Unix socket instead
+//!   (see `snap_single_instance`). Behaviour is the same for the user.
 
 mod app;
 mod autostart;
@@ -55,11 +58,27 @@ fn main() {
 
     init_logging();
 
+    let in_snap = std::env::var_os("SNAP").is_some();
+    let socket = if in_snap {
+        let verb = args.first().cloned().unwrap_or_default();
+        // Another copy is already running: hand it the command and stop here.
+        if snap_single_instance::forward(&verb) {
+            return;
+        }
+        Some(snap_single_instance::socket_path())
+    } else {
+        None
+    };
+
+    let mut flags = gio::ApplicationFlags::HANDLES_COMMAND_LINE;
+    if in_snap {
+        flags |= gio::ApplicationFlags::NON_UNIQUE;
+    }
     let app = adw::Application::builder()
         .application_id(APP_ID)
         // We want to see the command line even when this is a second run, so
         // `clipsy toggle` can be forwarded to the running instance.
-        .flags(gio::ApplicationFlags::HANDLES_COMMAND_LINE)
+        .flags(flags)
         .build();
 
     // Sets up the backend, the popup and the actions. Runs once in the first instance.
@@ -72,20 +91,80 @@ fn main() {
             .get(1)
             .map(|arg| arg.to_string_lossy().into_owned())
             .unwrap_or_default();
-
-        match verb.as_str() {
-            // No command: open the normal window (Settings, or the welcome on first run).
-            "" => app.activate(),
-            // Autostart at login: just keep running in the background.
-            BACKGROUND_FLAG => {}
-            v if COMMANDS.contains(&v) => app.activate_action(v, None),
-            other => eprintln!("clipsy: unknown command '{other}'"),
-        }
+        dispatch(app, &verb);
         // Exit status for the calling process.
         0
     });
 
+    // Keep the listener alive for as long as the app runs.
+    let _listener = socket.and_then(|path| snap_single_instance::listen(&app, &path));
+
     app.run();
+}
+
+/// Runs one command in this (the running) instance.
+fn dispatch(app: &adw::Application, verb: &str) {
+    match verb {
+        // No command: open the normal window (Settings, or the welcome on first run).
+        "" => app.activate(),
+        // Autostart at login: just keep running in the background.
+        BACKGROUND_FLAG => {}
+        v if COMMANDS.contains(&v) => app.activate_action(v, None),
+        other => eprintln!("clipsy: unknown command '{other}'"),
+    }
+}
+
+/// Single-instance support for the snap, through a Unix socket in the snap's
+/// private runtime folder instead of a D-Bus name.
+mod snap_single_instance {
+    use super::dispatch;
+    use adw::prelude::*;
+    use gtk::gio;
+    use std::io::Write;
+    use std::os::unix::net::UnixStream;
+    use std::path::{Path, PathBuf};
+
+    pub fn socket_path() -> PathBuf {
+        let dir = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        dir.join("clipsy.sock")
+    }
+
+    /// Sends `verb` to a running copy. Returns false when no copy is running.
+    pub fn forward(verb: &str) -> bool {
+        match UnixStream::connect(socket_path()) {
+            Ok(mut stream) => stream.write_all(format!("{verb}\n").as_bytes()).is_ok(),
+            Err(_) => false,
+        }
+    }
+
+    /// Listens for commands from later runs and performs them on the main thread.
+    pub fn listen(app: &adw::Application, path: &Path) -> Option<gio::SocketService> {
+        // A socket file left over from a crash would block binding; nobody answers on it.
+        let _ = std::fs::remove_file(path);
+        let service = gio::SocketService::new();
+        let address = gio::UnixSocketAddress::new(path);
+        if let Err(err) = service.add_address(
+            &address,
+            gio::SocketType::Stream,
+            gio::SocketProtocol::Default,
+            None::<&gtk::glib::Object>,
+        ) {
+            tracing::warn!("could not open the single-instance socket: {err}");
+            return None;
+        }
+        let app = app.clone();
+        service.connect_incoming(move |_, connection, _| {
+            let input = gio::DataInputStream::new(&connection.input_stream());
+            if let Ok(Some(line)) = input.read_line_utf8(None::<&gio::Cancellable>) {
+                dispatch(&app, line.trim());
+            }
+            false
+        });
+        service.start();
+        Some(service)
+    }
 }
 
 fn init_logging() {

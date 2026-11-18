@@ -1,0 +1,46 @@
+name: Snap
+
+# Builds the snap on every push to main (and on version tags). The .snap file is
+# attached to the run as a downloadable artifact. If the repository secret
+# SNAPCRAFT_STORE_CREDENTIALS is set (from `snapcraft export-login`), the build is
+# also uploaded to the Snap Store "edge" channel automatically.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      snap: ${{ steps.build.outputs.snap }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: snapcore/action-build@v1
+        id: build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clipsy-snap
+          path: ${{ steps.build.outputs.snap }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    env:
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+    steps:
+      - uses: actions/download-artifact@v4
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        with:
+          name: clipsy-snap
+      - uses: snapcore/action-publish@v1
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        with:
+          snap: ${{ needs.build.outputs.snap }}
+          release: edge
+      - name: Skip publishing (no store credentials yet)
+        if: env.SNAPCRAFT_STORE_CREDENTIALS == ''
+        run: echo "SNAPCRAFT_STORE_CREDENTIALS is not set; the snap was built but not uploaded."

@@ -8,6 +8,10 @@ name: Snap
 on:
   push:
     branches: [main]
+    # Docs-only changes do not need a new store upload.
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
     tags: ["v*"]
   workflow_dispatch:
 

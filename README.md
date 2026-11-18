@@ -4,6 +4,14 @@ Clipboard history for Linux. Clipsy remembers what you copy (text, rich text,
 images and files), lets you search it, and pastes any earlier item again with
 a keystroke.
 
+![Clipsy popup](docs/store/1-history-dark.png)
+
+[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/clipsy)
+
+```
+sudo snap install clipsy
+```
+
 ## Install
 
 Download `clipsy_<version>_amd64.deb` from the releases page and install it:

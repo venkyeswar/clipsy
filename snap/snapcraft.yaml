@@ -1,7 +1,7 @@
 name: clipsy
 title: Clipsy
 base: core24
-version: '0.1.0'
+version: '0.1.1'
 summary: Clipboard history for Linux, one shortcut away
 description: |
   Clipsy keeps a history of what you copy: text, images, files and rich text.

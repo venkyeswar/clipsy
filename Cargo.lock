@@ -120,7 +120,7 @@ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
 name = "clipsy-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clipsy-backends",
@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "clipsy-backends"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clipsy-core",
@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "clipsy-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "blake3",

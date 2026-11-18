@@ -40,7 +40,7 @@
     <keyword>pin</keyword>
   </keywords>
   <releases>
-    <release version="0.2.3" date="2026-11-19">
+    <release version="0.3.0" date="2026-11-19">
       <description>
         <ul>
           <li>Wayland setup works with one command pasted into a Terminal, then one log out and back in.</li>

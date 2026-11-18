@@ -40,6 +40,14 @@
     <keyword>pin</keyword>
   </keywords>
   <releases>
+    <release version="0.2.3" date="2026-11-19">
+      <description>
+        <ul>
+          <li>Wayland setup works with one command pasted into a Terminal, then one log out and back in.</li>
+          <li>Clearer setup steps, and the welcome window can be closed, moved and resized.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.2" date="2026-11-19">
       <description>
         <p>The GNOME extension setup command now works when pasted into a Terminal.</p>

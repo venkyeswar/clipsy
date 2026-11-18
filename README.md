@@ -27,11 +27,25 @@ in the background at login (you can turn this off in Settings).
 
 ## Ubuntu on Wayland (default)
 
-Ubuntu uses Wayland by default. After installing Clipsy, open it. On Wayland
-it shows a one-line command to turn on its GNOME extension. Run that command,
-then log out and back in.
+Ubuntu uses Wayland by default. There, Clipsy needs its small GNOME extension
+to see what you copy and to use the shortcut. Set it up once:
 
-On an Xorg session, no extension is needed.
+1. Open Clipsy from the app menu. It shows a setup card with a command and a
+   **Copy** button.
+2. Paste the command in a Terminal (Ctrl+Alt+T) and press Enter. For the snap,
+   the command is:
+
+   ```
+   gnome-extensions install --force /snap/clipsy/current/share/clipsy/clipsy@venkyeswar.github.io.zip && gsettings set org.gnome.shell disable-user-extensions false && L="$(gsettings get org.gnome.shell enabled-extensions)" && case "$L" in *clipsy@venkyeswar.github.io*) ;; *) gsettings set org.gnome.shell enabled-extensions "$(echo "$L" | sed -E "s/^@as \[\]$/[]/; s/\]$/, 'clipsy@venkyeswar.github.io']/; s/^\[, /[/")" ;; esac
+   ```
+
+3. Log out and log back in. GNOME turns on new extensions only at login.
+4. Open Clipsy again. The card says **Connected**. Press **Super+Shift+V**.
+
+To check the extension: `gnome-extensions info clipsy@venkyeswar.github.io`
+should show `State: ACTIVE`.
+
+On an Xorg session ("Ubuntu on Xorg"), no extension is needed.
 
 ## Usage
 

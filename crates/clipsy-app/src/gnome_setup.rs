@@ -78,8 +78,9 @@ pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
     );
 
     // Step 1: the command and a Copy button.
-    let step1 = gtk::Label::new(Some("1. Run this in a Terminal"));
+    let step1 = gtk::Label::new(Some("1. Copy this command, paste it in a Terminal (Ctrl+Alt+T) and press Enter"));
     step1.set_xalign(0.0);
+    step1.set_wrap(true);
     step1.add_css_class("caption-heading");
 
     let cmd_label = gtk::Label::new(Some(&cmd));
@@ -118,16 +119,17 @@ pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
     cmd_row.append(&copy);
 
     // Step 2: log out and in.
-    let step2 = gtk::Label::new(Some("2. Log out and log back in"));
+    let step2 = gtk::Label::new(Some("2. Log out, then log back in"));
     step2.set_xalign(0.0);
+    step2.set_wrap(true);
     step2.add_css_class("caption-heading");
-    let step2_note = dim_label("GNOME loads new extensions at login.");
+    let step2_note = dim_label("GNOME turns on new extensions only at login. Clipsy then connects by itself.");
     step2_note.add_css_class("caption");
 
     // Live status: waiting, then a green check.
     let spinner = gtk::Spinner::new();
     spinner.start();
-    let waiting = dim_label("Waiting for the extension to connect...");
+    let waiting = dim_label("Waiting for the extension. This changes to Connected after you log back in.");
     waiting.add_css_class("caption");
     let waiting_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     waiting_row.append(&spinner);

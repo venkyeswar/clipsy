@@ -70,6 +70,12 @@ fn main() {
         None
     };
 
+    // Started by hand in a terminal: hand off to a detached copy and return, so that
+    // closing the terminal does not stop Clipsy.
+    if detach_from_terminal(&args) {
+        return;
+    }
+
     let mut flags = gio::ApplicationFlags::HANDLES_COMMAND_LINE;
     if in_snap {
         flags |= gio::ApplicationFlags::NON_UNIQUE;
@@ -100,6 +106,54 @@ fn main() {
     let _listener = socket.and_then(|path| snap_single_instance::listen(&app, &path));
 
     app.run();
+}
+
+/// When `clipsy` (or `clipsy --background`) is run from a terminal, start the
+/// long-lived copy in a new session with no terminal attached. A closed
+/// terminal then has nothing to hang up. Returns true when the detached copy started.
+fn detach_from_terminal(args: &[String]) -> bool {
+    use std::io::IsTerminal;
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    const DETACHED: &str = "CLIPSY_DETACHED";
+    if std::env::var_os(DETACHED).is_some() {
+        return false;
+    }
+    // Only the commands that start the app; `clipsy toggle` and friends just
+    // talk to the running copy and exit.
+    let verb = args.first().map(String::as_str).unwrap_or("");
+    if !(verb.is_empty() || verb == BACKGROUND_FLAG) {
+        return false;
+    }
+    let from_terminal = std::io::stdin().is_terminal()
+        || std::io::stdout().is_terminal()
+        || std::io::stderr().is_terminal();
+    if !from_terminal {
+        return false;
+    }
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    let mut command = Command::new(exe);
+    command
+        .args(args)
+        .env(DETACHED, "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    // SAFETY: setsid() is async-signal-safe and takes no pointers. Running it in
+    // the child before exec gives the copy a new session with no controlling
+    // terminal, so a closed terminal cannot send it SIGHUP.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    command.spawn().is_ok()
 }
 
 /// Runs one command in this (the running) instance.

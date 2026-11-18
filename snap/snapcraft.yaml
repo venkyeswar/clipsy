@@ -1,7 +1,8 @@
 name: clipsy
 title: Clipsy
+icon: snap/gui/clipsy.svg
 base: core24
-version: '0.1.1'
+version: '0.1.2'
 summary: Clipboard history for Linux, one shortcut away
 description: |
   Clipsy keeps a history of what you copy: text, images, files and rich text.
@@ -11,7 +12,7 @@ description: |
 
   Works on Xorg sessions for now. Wayland support is planned.
 license: GPL-3.0-or-later
-grade: devel          # change to "stable" for the stable channel
+grade: stable
 confinement: strict
 
 apps:

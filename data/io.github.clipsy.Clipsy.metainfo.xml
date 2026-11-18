@@ -28,6 +28,11 @@
     <category>Utility</category>
   </categories>
   <releases>
+    <release version="0.1.2" date="2026-11-18">
+      <description>
+        <p>Keeps running after the terminal that started it is closed. First stable release.</p>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-11-18">
       <description>
         <p>Snap package fixes: runs inside the strict snap sandbox, starts at login correctly.</p>

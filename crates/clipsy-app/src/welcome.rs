@@ -86,8 +86,10 @@ pub fn show(app: &adw::Application, state: &Rc<State>) {
     let window = adw::Window::new();
     window.set_application(Some(app));
     window.set_title(Some("Welcome to Clipsy"));
-    window.set_default_size(380, -1);
-    window.set_resizable(false);
+    window.set_default_size(400, -1);
+    // Resizable, with a sensible minimum so the content never gets cramped.
+    window.set_resizable(true);
+    window.set_size_request(340, 360);
 
     let icon = gtk::Image::from_icon_name(APP_ID);
     icon.set_pixel_size(64);
@@ -181,13 +183,27 @@ pub fn show(app: &adw::Application, state: &Rc<State>) {
     }
     content.append(&list);
     content.append(&start);
+    // Keep the content a comfortable width when the window is made wider.
+    let clamp = adw::Clamp::new();
+    clamp.set_maximum_size(460);
+    clamp.set_child(Some(&content));
+
     // The setup box makes the window tall, so the content scrolls on small screens.
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_propagate_natural_height(true);
     scroller.set_max_content_height(640);
-    scroller.set_child(Some(&content));
-    window.set_content(Some(&scroller));
+    scroller.set_vexpand(true);
+    scroller.set_child(Some(&clamp));
+
+    // A slim, flat title bar: gives the window a close button and a place to
+    // drag it from (Wayland windows have no frame of their own).
+    let header = adw::HeaderBar::new();
+    header.set_show_title(false);
+    let toolbar = adw::ToolbarView::new();
+    toolbar.add_top_bar(&header);
+    toolbar.set_content(Some(&scroller));
+    window.set_content(Some(&toolbar));
     window.present();
 }
 

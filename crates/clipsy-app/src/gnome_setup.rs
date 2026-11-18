@@ -26,10 +26,13 @@ fn still_needed(state: &State) -> bool {
 /// GNOME has already loaded, and a new one loads only at the next login, so this
 /// adds the UUID to the enabled list in GSettings directly (once, keeping the rest).
 fn enable_command(uuid: &str) -> String {
+    // No `!` anywhere: in an interactive bash it triggers history expansion
+    // ("event not found"), even inside double quotes.
     format!(
         "gsettings set org.gnome.shell disable-user-extensions false && \
-gsettings set org.gnome.shell enabled-extensions \"$(gsettings get org.gnome.shell enabled-extensions | \
-sed -E \"/'{uuid}'/!{{s/^@as \\[\\]$/[]/; s/\\]$/, '{uuid}']/; s/^\\[, /[/}}\")\""
+L=\"$(gsettings get org.gnome.shell enabled-extensions)\" && \
+case \"$L\" in *{uuid}*) ;; *) gsettings set org.gnome.shell enabled-extensions \
+\"$(echo \"$L\" | sed -E \"s/^@as \\[\\]$/[]/; s/\\]$/, '{uuid}']/; s/^\\[, /[/\")\" ;; esac"
     )
 }
 
@@ -216,6 +219,8 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap();
             let fake = dir.join("gsettings");
             let out = dir.join("out");
+            // Starts as the old list: when Clipsy is already on, nothing is written.
+            std::fs::write(&out, before).unwrap();
             std::fs::write(
                 &fake,
                 format!(
@@ -226,13 +231,24 @@ mod tests {
             .unwrap();
             std::process::Command::new("chmod").arg("+x").arg(&fake).status().unwrap();
             let path = format!("{}:{}", dir.display(), std::env::var("PATH").unwrap_or_default());
-            let status = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(enable_command(uuid))
+            // Run it the way a user does: pasted into an interactive bash, where
+            // history expansion is on.
+            use std::io::Write;
+            let mut child = std::process::Command::new("bash")
+                .args(["--norc", "--noprofile", "-i"])
                 .env("PATH", path)
-                .status()
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
                 .unwrap();
-            assert!(status.success());
+            let mut stdin = child.stdin.take().unwrap();
+            writeln!(stdin, "{}", enable_command(uuid)).unwrap();
+            writeln!(stdin, "exit").unwrap();
+            drop(stdin);
+            let output = child.wait_with_output().unwrap();
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(!stderr.contains("event not found"), "{stderr}");
             assert_eq!(std::fs::read_to_string(&out).unwrap(), after);
             std::fs::remove_dir_all(&dir).ok();
         }

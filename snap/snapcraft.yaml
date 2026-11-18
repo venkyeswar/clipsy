@@ -14,11 +14,23 @@ license: GPL-3.0-or-later
 grade: devel          # change to "stable" for the stable channel
 confinement: strict
 
+# The app keeps one running copy by owning this name on the session bus
+# (GApplication). A strictly confined snap may only own names it declares.
+slots:
+  clipsy-dbus:
+    interface: dbus
+    bus: session
+    name: io.github.clipsy.Clipsy
+
 apps:
   clipsy:
     command: bin/clipsy
+    common-id: io.github.clipsy.Clipsy
     extensions: [gnome]
-    autostart: clipsy.desktop
+    # Clipsy writes this file itself when "Start at login" is on.
+    autostart: io.github.clipsy.Clipsy.desktop
+    slots:
+      - clipsy-dbus
     plugs:
       - desktop
       - desktop-legacy

@@ -30,7 +30,13 @@ pub fn set_enabled(enabled: bool) -> anyhow::Result<()> {
 
     // Point at the binary we are running right now, so the entry survives
     // reinstalls to other paths when the setting is saved again.
-    let exe = std::env::current_exe().context("could not find the Clipsy program path")?;
+    // Inside a snap the real path changes with every update, so use the stable
+    // `clipsy` command that snapd provides instead.
+    let exe = if std::env::var_os("SNAP").is_some() {
+        PathBuf::from("clipsy")
+    } else {
+        std::env::current_exe().context("could not find the Clipsy program path")?
+    };
     let contents = format!(
         "[Desktop Entry]\n\
          Type=Application\n\

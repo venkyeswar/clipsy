@@ -140,6 +140,17 @@ fn start(app: &adw::Application) -> anyhow::Result<()> {
 
     connect_actions(app, &state, &popup);
 
+    // Delete expired items now, then once an hour, so old items go away even
+    // when nothing new is copied.
+    prune_history(&state, &popup);
+    {
+        let (state, popup) = (state.clone(), popup.clone());
+        glib::timeout_add_seconds_local(60 * 60, move || {
+            prune_history(&state, &popup);
+            glib::ControlFlow::Continue
+        });
+    }
+
     // Clear history on exit if the user asked for it.
     {
         let state = state.clone();
@@ -262,6 +273,16 @@ fn on_clip_changed(state: &State, popup: &Popup, event: ClipEvent) {
     };
     if stored {
         popup.refresh();
+    }
+}
+
+/// Applies the age, count and size limits to the history.
+fn prune_history(state: &State, popup: &Popup) {
+    let cfg = state.config.borrow().clone();
+    match state.store.borrow_mut().prune(&cfg) {
+        Ok(0) => {}
+        Ok(_) => popup.refresh(),
+        Err(err) => tracing::warn!("could not clean up history: {err:#}"),
     }
 }
 

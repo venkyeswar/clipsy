@@ -23,7 +23,8 @@ Press **Super+Shift+V** and a small, fast popup shows your clipboard history: te
 
 * Text, images, files and rich text, with image thumbnails
 * Search as you type, and filter by **Text**, **Images** or **Files**
-* Pin the clips you reuse. Pinned clips are never cleaned up.
+* Pin the clips you reuse. Pinned clips stay until you remove them.
+* Old clips clean themselves up after 2 days (or a time you choose)
 * Light and dark themes that follow your system
 * Your own shortcut, history size and storage limits
 * Resize and move the popup. It remembers its size.

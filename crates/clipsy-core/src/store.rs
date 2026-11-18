@@ -132,7 +132,8 @@ impl Store {
             }
         }
 
-        let formats = usable_formats(&ev.formats);
+        let with_files = with_uri_list(&ev.formats);
+        let formats = usable_formats(with_files.as_deref().unwrap_or(&ev.formats));
         if formats.is_empty() {
             return Ok(None);
         }
@@ -326,6 +327,29 @@ impl Store {
     /// Enforce `max_items` (unpinned items) and `max_total_mb` (all items), oldest unpinned
     /// first. Pinned items are never removed. Returns how many items were removed.
     pub fn prune(&mut self, cfg: &Config) -> Result<usize> {
+        let expired = self.delete_expired(cfg.general.keep_days)?;
+        Ok(expired + self.prune_to_limits(cfg)?)
+    }
+
+    /// Deletes unpinned items not copied or used for `keep_days` days.
+    /// 0 keeps everything. Returns how many were deleted.
+    pub fn delete_expired(&mut self, keep_days: u32) -> Result<usize> {
+        if keep_days == 0 {
+            return Ok(0);
+        }
+        let cutoff = now_ms() - i64::from(keep_days) * 24 * 60 * 60 * 1000;
+        let removed = self
+            .conn
+            .execute("DELETE FROM items WHERE pinned = 0 AND last_used_at < ?1", [cutoff])?;
+        if removed > 0 {
+            debug!(removed, keep_days, "deleted old history items");
+            self.purge_orphan_files()?;
+        }
+        Ok(removed)
+    }
+
+    /// Keeps the history within the item count and storage limits.
+    fn prune_to_limits(&mut self, cfg: &Config) -> Result<usize> {
         let max_items = cfg.general.max_items as usize;
         let max_bytes = cfg.general.max_total_mb as i64 * 1024 * 1024;
 
@@ -495,6 +519,29 @@ fn is_image(mime: &str) -> bool {
 
 fn is_plain(f: &Format) -> bool {
     base_mime(&f.mime) == "text/plain"
+}
+
+/// GNOME's file manager on Wayland can offer copied files only as
+/// `x-special/gnome-copied-files` ("copy" or "cut", then one URI per line).
+/// When there is no `text/uri-list`, this returns the formats with one added,
+/// so the item is stored as Files. The original format is kept for pasting.
+fn with_uri_list(formats: &[Format]) -> Option<Vec<Format>> {
+    if formats.iter().any(|f| base_mime(&f.mime) == "text/uri-list") {
+        return None;
+    }
+    let gnome = formats.iter().find(|f| base_mime(&f.mime) == "x-special/gnome-copied-files")?;
+    let text = String::from_utf8_lossy(&gnome.data);
+    let uris: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.contains("://"))
+        .collect();
+    if uris.is_empty() {
+        return None;
+    }
+    let mut out = vec![Format { mime: "text/uri-list".into(), data: (uris.join("\r\n") + "\r\n").into_bytes() }];
+    out.extend(formats.iter().cloned());
+    Some(out)
 }
 
 /// Drop empty formats and repeated base MIME types (first one wins).
@@ -784,6 +831,56 @@ mod tests {
             source_app: None,
             sensitive: false,
         }
+    }
+
+    #[test]
+    fn gnome_copied_files_are_stored_as_files() {
+        let (_d, mut store) = open();
+        let ev = ClipEvent {
+            formats: vec![
+                Format { mime: "text/plain;charset=utf-8".into(), data: b"notes.txt".to_vec() },
+                Format {
+                    mime: "x-special/gnome-copied-files".into(),
+                    data: b"copy\nfile:///home/u/notes.txt\nfile:///home/u/My%20Doc.pdf".to_vec(),
+                },
+            ],
+            source_app: Some("org.gnome.Nautilus".into()),
+            sensitive: false,
+        };
+        let id = store.insert_event(&ev, &Config::default()).unwrap().unwrap();
+        let files = store.list("", Filter::Files, 10).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].id, id);
+        assert!(store.list("", Filter::Text, 10).unwrap().is_empty());
+        let formats = store.formats(id).unwrap();
+        let uri = formats.iter().find(|f| f.mime == "text/uri-list").unwrap();
+        assert_eq!(uri.data, b"file:///home/u/notes.txt\r\nfile:///home/u/My%20Doc.pdf\r\n");
+        // The original format is kept so pasting into the file manager works.
+        assert!(formats.iter().any(|f| f.mime == "x-special/gnome-copied-files"));
+    }
+
+    #[test]
+    fn old_unpinned_items_expire() {
+        let (_d, mut store) = open();
+        let cfg = Config::default();
+        let old = store.insert_event(&text_ev("old"), &cfg).unwrap().unwrap();
+        let pinned = store.insert_event(&text_ev("old but pinned"), &cfg).unwrap().unwrap();
+        let fresh = store.insert_event(&text_ev("fresh"), &cfg).unwrap().unwrap();
+        store.set_pinned(pinned, true).unwrap();
+        let long_ago = now_ms() - 31 * 24 * 60 * 60 * 1000;
+        store
+            .conn
+            .execute("UPDATE items SET last_used_at = ?1 WHERE id IN (?2, ?3)", [long_ago, old, pinned])
+            .unwrap();
+
+        // 0 means keep forever.
+        assert_eq!(store.delete_expired(0).unwrap(), 0);
+        // prune() applies the default (2 days).
+        store.prune(&cfg).unwrap();
+        let ids: Vec<i64> = store.list("", Filter::All, 10).unwrap().iter().map(|i| i.id).collect();
+        assert!(!ids.contains(&old));
+        assert!(ids.contains(&pinned));
+        assert!(ids.contains(&fresh));
     }
 
     fn open() -> (TempDir, Store) {

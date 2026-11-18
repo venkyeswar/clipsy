@@ -70,6 +70,7 @@ fn general_page(state: &Rc<State>) -> adw::PreferencesPage {
     page.add(&startup);
 
     let history = new_group("History");
+    history.add(&keep_days_row(state));
     history.add(&spin_row(
         "Items to keep",
         "The oldest unpinned items are removed first.",
@@ -337,6 +338,45 @@ fn switch_row(
     row.connect_active_notify(move |row| {
         let value = row.is_active();
         update_config(&st, |c| set(c, value));
+    });
+    row
+}
+
+/// Choices for "Delete items older than": (days, label). 0 keeps items forever.
+const KEEP_DAYS: &[(u32, &str)] = &[
+    (1, "1 day"),
+    (2, "2 days"),
+    (7, "1 week"),
+    (30, "30 days"),
+    (90, "90 days"),
+    (0, "Never"),
+];
+
+/// "Delete items older than" drop-down. Applies the new limit right away.
+fn keep_days_row(state: &Rc<State>) -> adw::ComboRow {
+    let row = adw::ComboRow::new();
+    row.set_title("Delete items older than");
+    row.set_subtitle("Counted from when you last copied or used an item. Pinned items are kept until you remove them.");
+    let labels: Vec<&str> = KEEP_DAYS.iter().map(|(_, label)| *label).collect();
+    row.set_model(Some(&gtk::StringList::new(&labels)));
+    let current = state.config.borrow().general.keep_days;
+    // A value set by hand in config.toml that is not in the list shows as the closest longer choice.
+    let index = KEEP_DAYS
+        .iter()
+        .position(|(days, _)| *days == current)
+        .or_else(|| KEEP_DAYS.iter().position(|(days, _)| *days >= current && *days != 0))
+        .unwrap_or(KEEP_DAYS.len() - 1);
+    row.set_selected(index as u32);
+    let st = state.clone();
+    row.connect_selected_notify(move |row| {
+        let Some((days, _)) = KEEP_DAYS.get(row.selected() as usize) else {
+            return;
+        };
+        update_config(&st, |c| c.general.keep_days = *days);
+        let cfg = st.config.borrow().clone();
+        if let Err(err) = st.store.borrow_mut().prune(&cfg) {
+            tracing::warn!("could not delete old items: {err:#}");
+        }
     });
     row
 }

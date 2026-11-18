@@ -32,6 +32,9 @@ pub struct General {
     /// Mouse-selection clipboard (PRIMARY).
     pub watch_primary: bool,
     pub paste_on_select: bool,
+    /// Unpinned items not copied or used for this many days are deleted.
+    /// Pinned items are never deleted this way. 0 keeps everything forever.
+    pub keep_days: u32,
 }
 
 impl Default for General {
@@ -46,6 +49,7 @@ impl Default for General {
             save_rich_text: true,
             watch_primary: false,
             paste_on_select: true,
+            keep_days: 2,
         }
     }
 }
@@ -216,6 +220,7 @@ mod tests {
         assert_eq!(c.general.max_items, 500);
         assert_eq!(c.general.max_item_mb, 20);
         assert!(c.general.paste_on_select);
+        assert_eq!(c.general.keep_days, 2);
         assert_eq!(c.appearance.theme, "system");
         assert_eq!(c.shortcuts.toggle_popup, "<Super><Shift>v");
         assert_eq!(c.shortcuts.clear_history, "");

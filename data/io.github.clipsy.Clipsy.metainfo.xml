@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.clipsy.Clipsy</id>
+  <launchable type="desktop-id">io.github.clipsy.Clipsy.desktop</launchable>
+  <name>Clipsy</name>
+  <summary>Clipboard history for Linux</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="io.github.venkyeswar">
+    <name>venkyeswar</name>
+  </developer>
+  <url type="homepage">https://github.com/venkyeswar/clipsy</url>
+  <url type="bugtracker">https://github.com/venkyeswar/clipsy/issues</url>
+  <description>
+    <p>
+      Clipsy remembers what you copy: text, rich text, images and files.
+      Press a shortcut (Super+Shift+V by default) to open the history, search it,
+      and paste any earlier item again.
+    </p>
+    <ul>
+      <li>Search, filter by type, and pin favorite items</li>
+      <li>Keyboard-first: arrows, Enter, Ctrl+1 to 9 for quick paste</li>
+      <li>Light, dark and system themes</li>
+      <li>Local only: no network, no account, no telemetry</li>
+    </ul>
+  </description>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-11-18">
+      <description>
+        <p>First version: history, popup, settings and first-run welcome.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

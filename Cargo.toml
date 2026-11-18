@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["crates/clipsy-core", "crates/clipsy-backends", "crates/clipsy-app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

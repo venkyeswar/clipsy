@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Clipboard board -->
+  <rect x="24" y="22" width="80" height="94" rx="12" fill="#3584e4"/>
+  <!-- Paper sheet -->
+  <rect x="34" y="40" width="60" height="70" rx="6" fill="#ffffff"/>
+  <!-- Clip on top -->
+  <rect x="46" y="14" width="36" height="18" rx="6" fill="#1c71d8"/>
+  <!-- Lines of text -->
+  <rect x="43" y="56" width="42" height="7" rx="3.5" fill="#99c1f1"/>
+  <rect x="43" y="71" width="30" height="7" rx="3.5" fill="#99c1f1"/>
+  <rect x="43" y="86" width="36" height="7" rx="3.5" fill="#99c1f1"/>
+</svg>

@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Clipsy
+GenericName=Clipboard History
+Comment=Clipboard history manager
+Exec=clipsy
+Icon=io.github.clipsy.Clipsy
+Terminal=false
+Categories=GNOME;GTK;Utility;
+Keywords=clipboard;history;paste;copy;
+StartupNotify=true
+Actions=Settings;
+
+[Desktop Action Settings]
+Name=Settings
+Exec=clipsy settings

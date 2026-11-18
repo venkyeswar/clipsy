@@ -1,0 +1,37 @@
+name: clipsy
+title: Clipsy
+base: core24
+version: '0.1.0'
+summary: Clipboard history for Linux, one shortcut away
+description: |
+  Clipsy keeps a history of what you copy: text, images, files and rich text.
+  Press a shortcut (default Super+Shift+V), pick an item, and it pastes into the
+  app you were using. Light and dark themes, search, pinned items, and
+  configurable shortcuts. Everything stays on your computer.
+
+  Works on Xorg sessions for now. Wayland support is planned.
+license: GPL-3.0-or-later
+grade: devel          # change to "stable" for the stable channel
+confinement: strict
+
+apps:
+  clipsy:
+    command: bin/clipsy
+    extensions: [gnome]
+    autostart: clipsy.desktop
+    plugs:
+      - desktop
+      - desktop-legacy
+      - x11
+
+parts:
+  clipsy:
+    plugin: rust
+    source: .
+    rust-path: [crates/clipsy-app]
+    build-packages:
+      - pkg-config
+    override-build: |
+      craftctl default
+      install -Dm644 data/io.github.clipsy.Clipsy.metainfo.xml \
+        "$CRAFT_PART_INSTALL/usr/share/metainfo/io.github.clipsy.Clipsy.metainfo.xml"

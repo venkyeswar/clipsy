@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Clipsy
+GenericName=Clipboard History
+Comment=Clipboard history manager
+Exec=clipsy
+Icon=${SNAP}/meta/gui/clipsy.svg
+Terminal=false
+Categories=GNOME;GTK;Utility;
+Keywords=clipboard;history;paste;copy;
+StartupNotify=true

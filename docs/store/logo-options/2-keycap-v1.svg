@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<defs>
+<linearGradient id="sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c71d8"/><stop offset="1" stop-color="#1a5fb4"/></linearGradient>
+<linearGradient id="tp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#78aeed"/><stop offset="1" stop-color="#3584e4"/></linearGradient>
+<linearGradient id="cl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#deddda"/></linearGradient>
+</defs>
+<ellipse cx="64" cy="119" rx="46" ry="4" fill="#000" opacity=".15"/>
+<rect x="8" y="12" width="112" height="106" rx="26" fill="url(#sk)"/>
+<rect x="8" y="12" width="112" height="106" rx="26" fill="none" stroke="#000" stroke-opacity=".12"/>
+<rect x="15" y="17" width="98" height="86" rx="21" fill="url(#tp)"/>
+<rect x="16" y="18" width="96" height="84" rx="20" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="2"/>
+<rect x="38" y="30" width="52" height="62" rx="8" fill="#1a5fb4" opacity=".3" transform="translate(0 3)"/>
+<rect x="38" y="30" width="52" height="62" rx="8" fill="url(#cl)"/>
+<rect x="51" y="24" width="26" height="15" rx="5" fill="#3d3846"/>
+<rect x="56" y="28" width="16" height="6" rx="3" fill="#deddda"/>
+<rect x="48" y="50" width="32" height="7" rx="3.5" fill="#3584e4"/>
+<rect x="48" y="63" width="32" height="7" rx="3.5" fill="#3584e4"/>
+<rect x="48" y="76" width="20" height="7" rx="3.5" fill="#3584e4"/>
+</svg>

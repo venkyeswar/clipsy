@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<defs>
+<linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#78aeed"/><stop offset="1" stop-color="#3584e4"/></linearGradient>
+<linearGradient id="w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#deddda"/></linearGradient>
+<linearGradient id="y" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f8e45c"/><stop offset="1" stop-color="#f5c211"/></linearGradient>
+</defs>
+<rect x="8" y="62" width="112" height="56" rx="14" fill="#1a5fb4"/>
+<rect x="18" y="14" width="42" height="68" rx="9" fill="url(#w)" stroke="#c0bfbc" stroke-width="1.5"/>
+<rect x="26" y="26" width="26" height="8" rx="4" fill="#62a0ea"/>
+<rect x="26" y="41" width="26" height="8" rx="4" fill="#c0bfbc"/>
+<rect x="68" y="28" width="42" height="54" rx="9" fill="url(#y)"/>
+<circle cx="89" cy="46" r="8" fill="#fff"/>
+<rect x="8" y="62" width="112" height="50" rx="14" fill="url(#f)"/>
+<path d="M9 76a13 13 0 0 1 13-13h84a13 13 0 0 1 13 13" fill="none" stroke="#c0d9f8" stroke-width="2.5"/>
+<rect x="44" y="80" width="40" height="10" rx="5" fill="#1c71d8"/>
+</svg>

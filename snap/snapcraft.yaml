@@ -2,7 +2,7 @@ name: clipsy
 title: Clipsy - Clipboard Manager
 icon: snap/gui/clipsy.svg
 base: core24
-version: '0.3.0'
+version: '0.3.1'
 summary: 'Clipboard manager and history for Ubuntu: text, images and files, one key away'
 description: |
   Clipsy keeps a history of what you copy: text, images, files and rich text.

@@ -40,6 +40,11 @@
     <keyword>pin</keyword>
   </keywords>
   <releases>
+    <release version="0.3.1" date="2026-11-19">
+      <description>
+        <p>The filter tabs (All, Text, Images, Files, Pinned) select with one click on Wayland and Xorg.</p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-11-19">
       <description>
         <ul>

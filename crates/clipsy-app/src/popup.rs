@@ -212,8 +212,8 @@ impl Popup {
             hint.add_css_class("clipsy-hint");
             pad(&hint, 12, 6);
 
-            // The popup has no title bar, so the tab bar and the footer act as drag
-            // handles: hold the mouse on an empty part of them to move the window.
+            // The popup has no title bar, so the grip bar at the top and the footer
+            // act as drag handles. The tab bar is not one: its tabs need every click.
             // A slim bar with a small grip pill at the very top: the obvious place to grab.
             let grab_bar = gtk::Box::new(gtk::Orientation::Horizontal, 0);
             grab_bar.add_css_class("clipsy-grabbar");
@@ -226,7 +226,6 @@ impl Popup {
             grab_bar.append(&pill);
             tooltip_for_drag(&grab_bar);
             add_move_handle(&grab_bar, &window, &resizing);
-            add_move_handle(&chips_box, &window, &resizing);
             add_move_handle(&hint, &window, &resizing);
 
             // --- Put it together ------------------------------------------------------
@@ -953,10 +952,23 @@ fn tooltip_for_drag(widget: &gtk::Box) {
 /// Lets the user move the whole window by dragging `widget` (like a title bar).
 fn add_move_handle(widget: &impl IsA<gtk::Widget>, window: &gtk::Window, moving: &Rc<std::cell::Cell<bool>>) {
     widget.set_cursor_from_name(Some("grab"));
-    let click = gtk::GestureClick::new();
-    click.set_button(1);
+    // The move starts only after the pointer has really moved a few pixels, so a
+    // plain click never turns into a window move.
+    const THRESHOLD: f64 = 4.0;
+    let drag = gtk::GestureDrag::new();
+    drag.set_button(1);
+    let started = Rc::new(std::cell::Cell::new(false));
+    {
+        let started = started.clone();
+        drag.connect_drag_begin(move |_, _, _| started.set(false));
+    }
     let (window, source, moving) = (window.clone(), widget.clone().upcast::<gtk::Widget>(), moving.clone());
-    click.connect_pressed(move |gesture, _, x, y| {
+    drag.connect_drag_update(move |gesture, dx, dy| {
+        if started.get() || dx.hypot(dy) < THRESHOLD {
+            return;
+        }
+        started.set(true);
+        let Some((x, y)) = gesture.start_point() else { return };
         let Some(surface) = window.surface() else { return };
         let Ok(toplevel) = surface.downcast::<gtk::gdk::Toplevel>() else { return };
         // The window manager takes focus during the move; that is not "clicked away".
@@ -968,9 +980,10 @@ fn add_move_handle(widget: &impl IsA<gtk::Widget>, window: &gtk::Window, moving:
             .map(|p| (f64::from(p.x()), f64::from(p.y())))
             .unwrap_or((x, y));
         let Some(device) = gesture.device() else { return };
+        gesture.set_state(gtk::EventSequenceState::Claimed);
         toplevel.begin_move(&device, 1, point.0, point.1, gesture.current_event_time());
     });
-    widget.add_controller(click);
+    widget.add_controller(drag);
 }
 
 // --- Resizing ----------------------------------------------------------------------

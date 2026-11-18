@@ -40,7 +40,6 @@ parts:
     plugin: rust
     source: .
     rust-path: [crates/clipsy-app]
-    rust-channel: stable
     build-environment:
       - PATH: "${HOME}/.cargo/bin:${PATH}"
     build-packages:

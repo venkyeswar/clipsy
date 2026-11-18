@@ -25,13 +25,24 @@ apps:
       - x11
 
 parts:
+  # Installs the Rust toolchain with rustup. The Rust plugin on core24 expects
+  # either a rustup on PATH or a part named "rust-deps" that provides it.
+  rust-deps:
+    plugin: nil
+    build-packages:
+      - curl
+    override-pull: |
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --profile minimal --default-toolchain stable
+
   clipsy:
+    after: [rust-deps]
     plugin: rust
     source: .
     rust-path: [crates/clipsy-app]
     rust-channel: stable
-    build-snaps:
-      - rustup
+    build-environment:
+      - PATH: "${HOME}/.cargo/bin:${PATH}"
     build-packages:
       - pkg-config
     override-build: |

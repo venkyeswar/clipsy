@@ -33,8 +33,10 @@ pub struct General {
     pub watch_primary: bool,
     pub paste_on_select: bool,
     /// Unpinned items not copied or used for this many days are deleted.
-    /// Pinned items are never deleted this way. 0 keeps everything forever.
+    /// 0 keeps them forever.
     pub keep_days: u32,
+    /// The same for pinned items, which usually get a longer time. 0 keeps them forever.
+    pub keep_pinned_days: u32,
 }
 
 impl Default for General {
@@ -50,6 +52,7 @@ impl Default for General {
             watch_primary: false,
             paste_on_select: true,
             keep_days: 2,
+            keep_pinned_days: 10,
         }
     }
 }
@@ -221,6 +224,7 @@ mod tests {
         assert_eq!(c.general.max_item_mb, 20);
         assert!(c.general.paste_on_select);
         assert_eq!(c.general.keep_days, 2);
+        assert_eq!(c.general.keep_pinned_days, 10);
         assert_eq!(c.appearance.theme, "system");
         assert_eq!(c.shortcuts.toggle_popup, "<Super><Shift>v");
         assert_eq!(c.shortcuts.clear_history, "");

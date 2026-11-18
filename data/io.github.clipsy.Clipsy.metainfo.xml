@@ -45,7 +45,7 @@
         <ul>
           <li>Wayland setup works with one command pasted into a Terminal, then one log out and back in.</li>
           <li>Clearer setup steps, and the welcome window can be closed, moved and resized.</li>
-          <li>Old items are deleted automatically: unpinned items after 2 days by default (1 day to 90 days, or never, in Settings). Pinned items are kept until you remove them.</li>
+          <li>Old items are deleted automatically: unpinned items after 2 days and pinned items after 10 days by default. Both can be changed in Settings (1 day to 90 days, or never).</li>
           <li>Files copied in the Files app on Wayland now show under the Files filter.</li>
         </ul>
       </description>

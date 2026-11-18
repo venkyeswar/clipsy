@@ -327,22 +327,24 @@ impl Store {
     /// Enforce `max_items` (unpinned items) and `max_total_mb` (all items), oldest unpinned
     /// first. Pinned items are never removed. Returns how many items were removed.
     pub fn prune(&mut self, cfg: &Config) -> Result<usize> {
-        let expired = self.delete_expired(cfg.general.keep_days)?;
+        let expired = self.delete_expired(false, cfg.general.keep_days)?
+            + self.delete_expired(true, cfg.general.keep_pinned_days)?;
         Ok(expired + self.prune_to_limits(cfg)?)
     }
 
-    /// Deletes unpinned items not copied or used for `keep_days` days.
-    /// 0 keeps everything. Returns how many were deleted.
-    pub fn delete_expired(&mut self, keep_days: u32) -> Result<usize> {
+    /// Deletes pinned (or unpinned) items not copied or used for `keep_days`
+    /// days. 0 keeps them all. Returns how many were deleted.
+    pub fn delete_expired(&mut self, pinned: bool, keep_days: u32) -> Result<usize> {
         if keep_days == 0 {
             return Ok(0);
         }
         let cutoff = now_ms() - i64::from(keep_days) * 24 * 60 * 60 * 1000;
-        let removed = self
-            .conn
-            .execute("DELETE FROM items WHERE pinned = 0 AND last_used_at < ?1", [cutoff])?;
+        let removed = self.conn.execute(
+            "DELETE FROM items WHERE pinned = ?1 AND last_used_at < ?2",
+            rusqlite::params![pinned, cutoff],
+        )?;
         if removed > 0 {
-            debug!(removed, keep_days, "deleted old history items");
+            debug!(removed, pinned, keep_days, "deleted old history items");
             self.purge_orphan_files()?;
         }
         Ok(removed)
@@ -860,26 +862,35 @@ mod tests {
     }
 
     #[test]
-    fn old_unpinned_items_expire() {
+    fn old_items_expire() {
         let (_d, mut store) = open();
-        let cfg = Config::default();
-        let old = store.insert_event(&text_ev("old"), &cfg).unwrap().unwrap();
-        let pinned = store.insert_event(&text_ev("old but pinned"), &cfg).unwrap().unwrap();
+        let cfg = Config::default(); // 2 days unpinned, 10 days pinned
+        let day = 24 * 60 * 60 * 1000;
+        let old = store.insert_event(&text_ev("3 days, unpinned"), &cfg).unwrap().unwrap();
+        let pinned_recent = store.insert_event(&text_ev("3 days, pinned"), &cfg).unwrap().unwrap();
+        let pinned_old = store.insert_event(&text_ev("11 days, pinned"), &cfg).unwrap().unwrap();
         let fresh = store.insert_event(&text_ev("fresh"), &cfg).unwrap().unwrap();
-        store.set_pinned(pinned, true).unwrap();
-        let long_ago = now_ms() - 31 * 24 * 60 * 60 * 1000;
-        store
-            .conn
-            .execute("UPDATE items SET last_used_at = ?1 WHERE id IN (?2, ?3)", [long_ago, old, pinned])
-            .unwrap();
+        store.set_pinned(pinned_recent, true).unwrap();
+        store.set_pinned(pinned_old, true).unwrap();
+        let set_age = |store: &Store, id: i64, days: i64| {
+            store
+                .conn
+                .execute("UPDATE items SET last_used_at = ?1 WHERE id = ?2", [now_ms() - days * day, id])
+                .unwrap();
+        };
+        set_age(&store, old, 3);
+        set_age(&store, pinned_recent, 3);
+        set_age(&store, pinned_old, 11);
 
         // 0 means keep forever.
-        assert_eq!(store.delete_expired(0).unwrap(), 0);
-        // prune() applies the default (2 days).
+        assert_eq!(store.delete_expired(false, 0).unwrap(), 0);
+        assert_eq!(store.delete_expired(true, 0).unwrap(), 0);
+
         store.prune(&cfg).unwrap();
         let ids: Vec<i64> = store.list("", Filter::All, 10).unwrap().iter().map(|i| i.id).collect();
         assert!(!ids.contains(&old));
-        assert!(ids.contains(&pinned));
+        assert!(ids.contains(&pinned_recent));
+        assert!(!ids.contains(&pinned_old));
         assert!(ids.contains(&fresh));
     }
 

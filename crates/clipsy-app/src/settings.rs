@@ -70,7 +70,8 @@ fn general_page(state: &Rc<State>) -> adw::PreferencesPage {
     page.add(&startup);
 
     let history = new_group("History");
-    history.add(&keep_days_row(state));
+    history.add(&keep_days_row(state, false));
+    history.add(&keep_days_row(state, true));
     history.add(&spin_row(
         "Items to keep",
         "The oldest unpinned items are removed first.",
@@ -342,24 +343,34 @@ fn switch_row(
     row
 }
 
-/// Choices for "Delete items older than": (days, label). 0 keeps items forever.
+/// Choices for the "Delete ... older than" rows: (days, label). 0 keeps items forever.
 const KEEP_DAYS: &[(u32, &str)] = &[
     (1, "1 day"),
     (2, "2 days"),
     (7, "1 week"),
+    (10, "10 days"),
     (30, "30 days"),
     (90, "90 days"),
     (0, "Never"),
 ];
 
-/// "Delete items older than" drop-down. Applies the new limit right away.
-fn keep_days_row(state: &Rc<State>) -> adw::ComboRow {
+/// "Delete items older than" drop-down, for unpinned or pinned items.
+/// Applies the new limit right away.
+fn keep_days_row(state: &Rc<State>, pinned: bool) -> adw::ComboRow {
     let row = adw::ComboRow::new();
-    row.set_title("Delete items older than");
-    row.set_subtitle("Counted from when you last copied or used an item. Pinned items are kept until you remove them.");
+    if pinned {
+        row.set_title("Delete pinned items older than");
+        row.set_subtitle("Pinned items get their own, longer time.");
+    } else {
+        row.set_title("Delete items older than");
+        row.set_subtitle("Counted from when you last copied or used an item.");
+    }
     let labels: Vec<&str> = KEEP_DAYS.iter().map(|(_, label)| *label).collect();
     row.set_model(Some(&gtk::StringList::new(&labels)));
-    let current = state.config.borrow().general.keep_days;
+    let current = {
+        let general = &state.config.borrow().general;
+        if pinned { general.keep_pinned_days } else { general.keep_days }
+    };
     // A value set by hand in config.toml that is not in the list shows as the closest longer choice.
     let index = KEEP_DAYS
         .iter()
@@ -372,7 +383,13 @@ fn keep_days_row(state: &Rc<State>) -> adw::ComboRow {
         let Some((days, _)) = KEEP_DAYS.get(row.selected() as usize) else {
             return;
         };
-        update_config(&st, |c| c.general.keep_days = *days);
+        update_config(&st, |c| {
+            if pinned {
+                c.general.keep_pinned_days = *days;
+            } else {
+                c.general.keep_days = *days;
+            }
+        });
         let cfg = st.config.borrow().clone();
         if let Err(err) = st.store.borrow_mut().prune(&cfg) {
             tracing::warn!("could not delete old items: {err:#}");

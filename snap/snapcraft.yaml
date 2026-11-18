@@ -29,6 +29,9 @@ parts:
     plugin: rust
     source: .
     rust-path: [crates/clipsy-app]
+    rust-channel: stable
+    build-snaps:
+      - rustup
     build-packages:
       - pkg-config
     override-build: |

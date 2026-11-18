@@ -186,8 +186,9 @@ impl Popup {
             });
 
             let list_view = gtk::ListView::new(Some(selection.clone()), Some(factory));
-            // A single click pastes the row. Enter pastes too (see `on_key`).
-            list_view.set_single_click_activate(true);
+            // Each row handles its own left click (see `build_row`), which works the
+            // same on X11 and Wayland. The list's own activation is used for Enter.
+            list_view.set_single_click_activate(false);
             let w = me.clone();
             list_view.connect_activate(move |_, position| {
                 if let Some(p) = w.upgrade() {
@@ -800,6 +801,24 @@ fn build_row(clip: &ClipItem, me: Weak<Popup>) -> gtk::Widget {
     }
     item.set_child(Some(&row));
     item.add_overlay(&actions);
+
+    // One left click pastes the row. The pin and remove buttons claim their own
+    // clicks first, so pressing them does not paste. The popup hides right after
+    // the paste, so a second click can never land on the row.
+    let left = gtk::GestureClick::new();
+    left.set_button(1);
+    let w = me.clone();
+    left.connect_released(move |gesture, n_press, _, _| {
+        if n_press != 1 {
+            return;
+        }
+        gesture.set_state(gtk::EventSequenceState::Claimed);
+        if let Some(p) = w.upgrade() {
+            tracing::debug!("popup: row for item {id} clicked");
+            p.use_item(id, false, true);
+        }
+    });
+    item.add_controller(left);
 
     // Right-click opens the context menu. The menu is built only when it is needed,
     // so rows that are never right-clicked carry no popover.

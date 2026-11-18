@@ -3,7 +3,7 @@
   <id>io.github.clipsy.Clipsy</id>
   <launchable type="desktop-id">io.github.clipsy.Clipsy.desktop</launchable>
   <name>Clipsy</name>
-  <summary>Clipboard history for Linux</summary>
+  <summary>Clipboard manager and history for Ubuntu</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <developer id="io.github.venkyeswar">
@@ -21,13 +21,34 @@
       <li>Search, filter by type, and pin favorite items</li>
       <li>Keyboard-first: arrows, Enter, Ctrl+1 to 9 for quick paste</li>
       <li>Light, dark and system themes</li>
+      <li>Works on Ubuntu's default desktop, on GNOME Wayland and Xorg</li>
       <li>Local only: no network, no account, no telemetry</li>
     </ul>
   </description>
   <categories>
     <category>Utility</category>
   </categories>
+  <keywords>
+    <keyword>clipboard</keyword>
+    <keyword>clipboard manager</keyword>
+    <keyword>clipboard history</keyword>
+    <keyword>history</keyword>
+    <keyword>copy</keyword>
+    <keyword>paste</keyword>
+    <keyword>Win+V</keyword>
+    <keyword>snippets</keyword>
+    <keyword>pin</keyword>
+  </keywords>
   <releases>
+    <release version="0.2.0" date="2026-11-18">
+      <description>
+        <ul>
+          <li>Works on GNOME Wayland (Ubuntu's default desktop) via a small GNOME extension that Clipsy helps you turn on</li>
+          <li>New app icon</li>
+          <li>Easier to find in the App Center</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.2" date="2026-11-18">
       <description>
         <p>Keeps running after the terminal that started it is closed. First stable release.</p>

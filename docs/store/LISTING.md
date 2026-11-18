@@ -3,14 +3,14 @@
 Copy each field into the listing form, then click **Save**.
 
 ## Title
-Clipsy
+Clipsy - Clipboard Manager
 
 ## Category
 - Primary: **Utilities**
 - Second (click "+ Add another category"): **Productivity**
 
 ## Summary (max 78 characters)
-Clipboard history for Linux: text, images and files, one shortcut away
+Clipboard manager and history for Ubuntu: text, images and files, one key away
 
 ## Description
 Uses the store's formatting: `**bold**`, `_italics_`, `* lists`, backticks for code.
@@ -41,7 +41,7 @@ Your history stays on your computer and is never sent anywhere. Copies from pass
 
 **Good to know**
 
-Works on Ubuntu on Xorg (X11) today. Wayland support is coming. To use Xorg, pick _Ubuntu on Xorg_ from the gear icon on the login screen.
+Works on Ubuntu's default desktop, on both Wayland and Xorg. On Wayland, Clipsy asks you to turn on its small GNOME extension the first time (one command, then log out and back in).
 
 Source code and issues: https://github.com/venkyeswar/clipsy
 ```

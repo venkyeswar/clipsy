@@ -9,3 +9,6 @@ clipsy-core = { path = "../clipsy-core" }
 anyhow = "1"
 tracing = "0.1"
 x11rb = { version = "0.13", features = ["xfixes", "xtest", "xkb"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"

@@ -10,7 +10,7 @@ use std::thread;
 use adw::prelude::*;
 use anyhow::Context;
 use gtk::glib::prelude::IsA;
-use clipsy_backends::{Backend, HotkeyAction, NoBackend};
+use clipsy_backends::{Backend, HotkeyAction, NoBackend, SetupNeeded};
 use clipsy_core::{ClipEvent, Config, Store};
 use gtk::{gio, glib};
 
@@ -71,7 +71,7 @@ fn start(app: &adw::Application) -> anyhow::Result<()> {
     let (clip_tx, clip_rx) = mpsc::channel::<ClipEvent>();
     let (hotkey_tx, hotkey_rx) = mpsc::channel::<HotkeyAction>();
 
-    // If no backend works (for example on Wayland), Clipsy still starts. It shows
+    // If no backend works (for example on an unsupported desktop), Clipsy still starts. It shows
     // one notification and runs with `NoBackend`: no recording, no shortcuts.
     let started = clipsy_backends::detect().and_then(|mut backend| {
         backend.start(clip_tx, hotkey_tx)?;
@@ -107,6 +107,21 @@ fn start(app: &adw::Application) -> anyhow::Result<()> {
                 &format!("{accel} is used by another app. Choose another one in Settings."),
             );
         }
+    }
+
+    // The backend can start fine and still need the user to turn on the GNOME
+    // extension. Give it a few seconds to connect, then remind the user once.
+    if state.backend.borrow().setup_needed() == Some(SetupNeeded::GnomeExtension) {
+        let (app, state) = (app.clone(), state.clone());
+        glib::timeout_add_local_once(std::time::Duration::from_secs(6), move || {
+            if state.backend.borrow().setup_needed() == Some(SetupNeeded::GnomeExtension) {
+                notify(
+                    &app,
+                    "Finish setting up Clipsy",
+                    "Turn on the Clipsy GNOME extension to record your clipboard on Wayland. Open Clipsy for the steps.",
+                );
+            }
+        });
     }
 
     let popup = Popup::new(app, state.clone());

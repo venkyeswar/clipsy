@@ -319,6 +319,10 @@ impl Popup {
         self.refresh_banner();
         self.reload(Focus::Top);
 
+        // On GNOME Wayland the Shell extension places and focuses the window, so it
+        // must know before the window appears. X11 ignores this.
+        let position = self.state.config.borrow().appearance.popup_position.clone();
+        self.state.backend.borrow().popup_will_show(&position);
         self.window.present();
         self.search.grab_focus();
 

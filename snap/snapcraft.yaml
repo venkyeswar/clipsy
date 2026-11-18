@@ -1,16 +1,17 @@
 name: clipsy
-title: Clipsy
+title: Clipsy - Clipboard Manager
 icon: snap/gui/clipsy.svg
 base: core24
-version: '0.1.2'
-summary: Clipboard history for Linux, one shortcut away
+version: '0.2.0'
+summary: 'Clipboard manager and history for Ubuntu: text, images and files, one key away'
 description: |
   Clipsy keeps a history of what you copy: text, images, files and rich text.
   Press a shortcut (default Super+Shift+V), pick an item, and it pastes into the
   app you were using. Light and dark themes, search, pinned items, and
   configurable shortcuts. Everything stays on your computer.
 
-  Works on Xorg sessions for now. Wayland support is planned.
+  Works on Ubuntu's default desktop (GNOME, Wayland and Xorg). On Wayland it uses
+  a small GNOME extension that Clipsy guides you to turn on.
 license: GPL-3.0-or-later
 grade: stable
 confinement: strict
@@ -54,3 +55,15 @@ parts:
       craftctl default
       install -Dm644 data/io.github.clipsy.Clipsy.metainfo.xml \
         "$CRAFT_PART_INSTALL/usr/share/metainfo/io.github.clipsy.Clipsy.metainfo.xml"
+
+  # The GNOME Shell extension, zipped for the Clipsy app to install on Wayland.
+  # Ends up at /snap/clipsy/current/share/clipsy/clipsy@venkyeswar.github.io.zip
+  gnome-extension:
+    plugin: nil
+    source: gnome-extension/clipsy@venkyeswar.github.io
+    build-packages:
+      - zip
+    override-build: |
+      mkdir -p "$CRAFT_PART_INSTALL/share/clipsy"
+      cd "$CRAFT_PART_SRC"
+      zip -r "$CRAFT_PART_INSTALL/share/clipsy/clipsy@venkyeswar.github.io.zip" metadata.json extension.js

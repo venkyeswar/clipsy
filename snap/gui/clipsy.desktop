@@ -2,10 +2,10 @@
 Type=Application
 Name=Clipsy
 GenericName=Clipboard History
-Comment=Clipboard history manager
+Comment=Clipboard manager with history of everything you copy
 Exec=clipsy
 Icon=${SNAP}/meta/gui/clipsy.svg
 Terminal=false
 Categories=GNOME;GTK;Utility;
-Keywords=clipboard;history;paste;copy;
+Keywords=clipboard;clipboard manager;history;paste;copy;snippets;pin;win+v;
 StartupNotify=true

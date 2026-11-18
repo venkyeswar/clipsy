@@ -11,7 +11,7 @@ use clipsy_backends::HotkeyAction;
 use gtk::{gdk, glib};
 
 use crate::app::{data_dir, set_hotkey, update_config, State};
-use crate::{autostart, APP_ID};
+use crate::{autostart, gnome_setup, APP_ID};
 
 /// Keycap style. Only libadwaita named colors, so light and dark both work.
 const CSS: &str = "
@@ -176,9 +176,18 @@ pub fn show(app: &adw::Application, state: &Rc<State>) {
     content.append(&tagline);
     content.append(&shortcut_row);
     content.append(&status);
+    if let Some(setup) = gnome_setup::setup_box(state) {
+        content.append(&setup);
+    }
     content.append(&list);
     content.append(&start);
-    window.set_content(Some(&content));
+    // The setup box makes the window tall, so the content scrolls on small screens.
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    scroller.set_propagate_natural_height(true);
+    scroller.set_max_content_height(640);
+    scroller.set_child(Some(&content));
+    window.set_content(Some(&scroller));
     window.present();
 }
 

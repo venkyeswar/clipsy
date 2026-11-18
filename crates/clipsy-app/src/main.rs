@@ -12,6 +12,7 @@
 
 mod app;
 mod autostart;
+mod gnome_setup;
 mod placement;
 mod popup;
 mod settings;

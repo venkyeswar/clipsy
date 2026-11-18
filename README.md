@@ -1,5 +1,7 @@
 # Clipsy
 
+A Win+V style clipboard manager for Ubuntu and GNOME.
+
 Clipboard history for Linux. Clipsy remembers what you copy (text, rich text,
 images and files), lets you search it, and pastes any earlier item again with
 a keystroke.
@@ -22,6 +24,14 @@ sudo apt install ./clipsy_<version>_amd64.deb
 
 This pulls in GTK 4 and libadwaita from Ubuntu's repositories. Clipsy starts
 in the background at login (you can turn this off in Settings).
+
+## Ubuntu on Wayland (default)
+
+Ubuntu uses Wayland by default. After installing Clipsy, open it. On Wayland
+it shows a one-line command to turn on its GNOME extension. Run that command,
+then log out and back in.
+
+On an Xorg session, no extension is needed.
 
 ## Usage
 
@@ -72,8 +82,8 @@ packaging/build-deb.sh
 
 ## Known limits
 
-- X11 only for now. Wayland sessions (for example, the default GNOME Wayland
-  session) are not supported yet.
+- Works on Ubuntu's default desktop (GNOME), on both Wayland and Xorg. On
+  Wayland, the GNOME extension described above is required.
 - Tested on Ubuntu 24.04 with GNOME Shell 46.
 
 ## License
@@ -86,9 +96,9 @@ The `snap/` folder holds the Snap Store packaging. To build and publish:
 
 ```bash
 sudo snap install snapcraft --classic
-snapcraft                      # builds clipsy_0.1.0_amd64.snap (needs LXD or Multipass)
+snapcraft                      # builds clipsy_0.2.0_amd64.snap (needs LXD or Multipass)
 snapcraft login                # your Snap Store account
 snapcraft register clipsy      # reserve the name once
-snapcraft upload --release=edge clipsy_0.1.0_amd64.snap
+snapcraft upload --release=edge clipsy_0.2.0_amd64.snap
 ```
 Promote from `edge` to `beta`, `candidate` and `stable` with `snapcraft release`.

@@ -5,7 +5,7 @@ use std::sync::mpsc::Sender;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PasteMode { Normal, Terminal }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HotkeyAction { TogglePopup, ClearHistory, PauseRecording }
 
 pub trait Backend: Send {
@@ -22,12 +22,33 @@ pub trait Backend: Send {
     /// accel uses GTK syntax e.g. "<Super>v". Err if grab fails (conflict).
     fn register_hotkey(&mut self, action: HotkeyAction, accel: &str) -> anyhow::Result<()>;
     fn unregister_hotkey(&mut self, action: HotkeyAction);
+    /// Called right before the popup window is presented. `position` is
+    /// `appearance.popup_position` ("cursor" or "center"). The GNOME backend asks
+    /// the Shell extension to place and focus the popup; X11 does nothing here.
+    fn popup_will_show(&self, _position: &str) {}
+    /// Setup the user still has to do before this backend fully works, if any.
+    fn setup_needed(&self) -> Option<SetupNeeded> {
+        None
+    }
 }
 
+/// Something the user must do before clipboard history works.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SetupNeeded {
+    /// GNOME on Wayland: the Clipsy GNOME Shell extension is not installed, not
+    /// enabled, or has not connected yet (it loads at the next login after install).
+    GnomeExtension,
+}
+
+/// UUID of the companion GNOME Shell extension (directory name under
+/// `gnome-shell/extensions/`).
+pub const GNOME_EXTENSION_UUID: &str = "clipsy@venkyeswar.github.io";
+
+pub mod gnome;
 pub mod x11;
 
 /// Message shown when the session is Wayland (no backend exists for it yet).
-pub const WAYLAND_UNSUPPORTED: &str = "Wayland not supported yet; use an Xorg session";
+pub const WAYLAND_UNSUPPORTED: &str = "This Wayland desktop is not supported yet. Clipsy works on GNOME (Ubuntu's default desktop) and on Xorg.";
 
 /// Stand-in backend used when no real backend could start. Clipboard watching,
 /// hotkeys and paste are all unavailable, but the app itself keeps running.
@@ -56,13 +77,30 @@ impl Backend for NoBackend {
     fn unregister_hotkey(&mut self, _action: HotkeyAction) {}
 }
 
-/// Pick a backend for the current session. Currently only X11 is implemented.
-/// Wayland is rejected explicitly, even when XWayland provides a DISPLAY.
+/// True when `XDG_CURRENT_DESKTOP` (colon-separated, e.g. "ubuntu:GNOME") names GNOME.
+fn is_gnome_desktop() -> bool {
+    std::env::var("XDG_CURRENT_DESKTOP")
+        .unwrap_or_default()
+        .split(':')
+        .any(|d| d.trim().eq_ignore_ascii_case("gnome"))
+}
+
+/// Pick a backend for the current session: GNOME on Wayland uses the Shell extension,
+/// Xorg uses X11, other Wayland desktops are rejected (even when XWayland provides a
+/// DISPLAY). `CLIPSY_BACKEND=x11|gnome` forces a backend, for testing.
 pub fn detect() -> anyhow::Result<Box<dyn Backend>> {
+    match std::env::var("CLIPSY_BACKEND").unwrap_or_default().to_ascii_lowercase().as_str() {
+        "x11" => return Ok(Box::new(x11::X11Backend::new()?)),
+        "gnome" => return Ok(Box::new(gnome::GnomeBackend::new()?)),
+        _ => {}
+    }
     let session = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
     let wayland = session.eq_ignore_ascii_case("wayland")
         || (!session.eq_ignore_ascii_case("x11") && std::env::var_os("WAYLAND_DISPLAY").is_some());
     if wayland {
+        if is_gnome_desktop() {
+            return Ok(Box::new(gnome::GnomeBackend::new()?));
+        }
         anyhow::bail!(WAYLAND_UNSUPPORTED);
     }
     let session_x11 = session.eq_ignore_ascii_case("x11");

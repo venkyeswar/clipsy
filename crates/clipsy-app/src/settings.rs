@@ -12,7 +12,7 @@ use clipsy_core::Config;
 use gtk::{gdk, glib};
 
 use crate::app::{apply_theme, set_hotkey, update_config, State};
-use crate::{autostart, APP_ID};
+use crate::{autostart, gnome_setup, APP_ID};
 
 /// Name used to find an open Settings window again.
 const WINDOW_NAME: &str = "clipsy-settings";
@@ -51,6 +51,12 @@ fn build(app: &adw::Application, state: &Rc<State>) -> adw::PreferencesWindow {
 
 fn general_page(state: &Rc<State>) -> adw::PreferencesPage {
     let page = new_page("preferences-system-symbolic", "General");
+
+    if let Some(setup) = gnome_setup::setup_box(state) {
+        let group = adw::PreferencesGroup::new();
+        group.add(&setup);
+        page.add(&group);
+    }
 
     let startup = new_group("Startup");
     startup.add(&autostart_row(state));

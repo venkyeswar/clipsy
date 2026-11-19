@@ -1,3 +1,4 @@
+import { DownloadsSection } from "@/components/downloads-section";
 import { Hero } from "@/components/hero";
 import { InstallSection } from "@/components/install-section";
 import { SiteFooter } from "@/components/site-footer";
@@ -5,7 +6,6 @@ import { SiteHeader } from "@/components/site-header";
 import { Toaster } from "@/components/ui/sonner";
 
 const sections = [
-  { id: "downloads", title: "Downloads" },
   { id: "features", title: "Features" },
   { id: "shortcuts", title: "Shortcuts" },
   { id: "help", title: "Help" },
@@ -26,6 +26,7 @@ export default function App() {
         <section id="install" className="py-12" style={{ scrollMarginTop: "4rem" }}>
           <InstallSection />
         </section>
+        <DownloadsSection />
         {sections.map((section) => (
           <section key={section.id} id={section.id} className="py-12">
             <h2 className="font-heading text-2xl font-semibold tracking-tight">

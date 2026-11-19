@@ -40,6 +40,16 @@
     <keyword>pin</keyword>
   </keywords>
   <releases>
+    <release version="0.4.2" date="2026-11-19">
+      <description>
+        <ul>
+          <li>Pasting an image now works in terminals and tools such as Claude Code and opencode.</li>
+          <li>A redesigned welcome window that shows one screen at a time, with a clearer copy-command step.</li>
+          <li>Windows: fixed the startup error about the single-instance pipe and user SID.</li>
+          <li>A redesigned, more compact website.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.4.0" date="2026-11-19">
       <description>
         <p>Adds Windows support (experimental).</p>

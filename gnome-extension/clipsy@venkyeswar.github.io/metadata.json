@@ -4,5 +4,5 @@
   "description": "Clipboard history integration for the Clipsy app on Wayland: watches the clipboard, registers the global shortcut, pastes into the previous window and places the popup near the pointer. Talks only to a local Unix socket.",
   "shell-version": ["46", "47", "48", "49", "50"],
   "url": "https://github.com/venkyeswar/clipsy",
-  "version-name": "0.4.0"
+  "version-name": "0.4.2"
 }

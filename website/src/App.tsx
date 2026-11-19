@@ -1,9 +1,10 @@
 import { Hero } from "@/components/hero";
+import { InstallSection } from "@/components/install-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { Toaster } from "@/components/ui/sonner";
 
 const sections = [
-  { id: "install", title: "Install" },
   { id: "downloads", title: "Downloads" },
   { id: "features", title: "Features" },
   { id: "shortcuts", title: "Shortcuts" },
@@ -22,6 +23,9 @@ export default function App() {
       <SiteHeader />
       <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4">
         <Hero />
+        <section id="install" className="py-12" style={{ scrollMarginTop: "4rem" }}>
+          <InstallSection />
+        </section>
         {sections.map((section) => (
           <section key={section.id} id={section.id} className="py-12">
             <h2 className="font-heading text-2xl font-semibold tracking-tight">
@@ -31,6 +35,7 @@ export default function App() {
         ))}
       </main>
       <SiteFooter />
+      <Toaster />
     </div>
   );
 }

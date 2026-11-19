@@ -42,7 +42,7 @@ website work waits until then.
 7. The settings file is created the first time Clipsy starts. Check that it exists:
 
    ```powershell
-   dir $env:APPDATA\clipsy\config
+   dir "$env:APPDATA\clipsy\config"
    ```
 
    Expected: a file named `config.toml` is listed.
@@ -60,6 +60,20 @@ Read the log lines in that console window. Copy any that mention `warn`, `error`
 `paste` for your report.
 
 Unless a check says otherwise, keep Clipsy running for the whole list.
+
+### Good to know
+
+- **Start at login is ON by default.** The first time Clipsy starts, it adds itself to your
+  Windows login. You can untick **Start Clipsy when I sign in** in Settings (check 7 covers this).
+- **A console window appears at login** while the app runs as a console program. This is a
+  known limit for now. Leave it open, or close it to stop Clipsy.
+- **Starting a second copy does not start a second Clipsy.** If Clipsy is already running and you
+  double-click `clipsy-windows.exe` again, the running copy toggles its popup instead.
+- **No on-screen first-run message.** The line "Clipsy is running. Press Ctrl+Shift+V..." is only
+  a log line in the console window. There is no pop-up notice yet.
+- **Moving the program:** if you move `clipsy-windows.exe` to another folder, start it once from
+  the new place. While **Start Clipsy when I sign in** is ticked, the login entry is updated
+  on every start.
 
 ---
 
@@ -284,7 +298,8 @@ Steps:
 1. Right-click the tray icon, click **Settings**.
 2. In the **Shortcuts** group, click in the field labelled **Show popup**. Select the text
    and type `<Super>v` (this is Win+V, which Windows reserves).
-3. Click **Save** at the bottom of the window.
+3. Click **Save** at the bottom of the window. If **Save** is greyed out, the red message under
+   **Show popup** says why. Click **Cancel** and try again.
 4. Read the message. It appears in red under the **Show popup** field, or at the bottom of the window.
 5. If Settings closed or the message is not clear, note what you saw.
 6. Click **Cancel** (or close Settings) and press **Ctrl+Shift+V**.
@@ -296,14 +311,14 @@ If the Win+V shortcut appears to work, write that down. Then set the **Show popu
 
 Steps if Settings does not let you save (or you want to test a startup problem):
 1. Quit Clipsy: `.\target\release\clipsy-windows.exe quit`.
-2. Open Notepad. Click **File**, then **Open**. In the file name box type
-   `%APPDATA%\clipsy\config\config.toml` and press **Enter**.
+2. Press **Windows+R**, type `%APPDATA%\clipsy\config`, press **Enter**. Double-click `config.toml`.
+   If Windows asks which app to use, choose **Notepad**.
 3. Under `[shortcuts]`, change `toggle_popup` to `"<Super>v"`. Click **File**, then **Save as**.
    Set **Save as type** to **All Files**, keep the name `config.toml`, click **Save** and confirm the overwrite.
 4. Check the file name:
 
    ```powershell
-   dir $env:APPDATA\clipsy\config
+   dir "$env:APPDATA\clipsy\config"
    ```
 
    Expected: `config.toml`, **not** `config.toml.txt`.
@@ -350,7 +365,7 @@ Steps:
 5. Check the file name. In PowerShell run:
 
    ```powershell
-   dir $env:APPDATA\clipsy\config
+   dir "$env:APPDATA\clipsy\config"
    ```
 
    Expected: the file is `config.toml`, **not** `config.toml.txt`. If you see `.txt`, rename it

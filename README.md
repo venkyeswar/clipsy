@@ -124,7 +124,17 @@ Start Clipsy from the same PowerShell window:
 .\target\release\clipsy-windows.exe
 ```
 
-A black console window stays open while Clipsy runs. Leave it open. Clipsy also shows
+A black console window stays open while Clipsy runs. Leave it open.
+
+Good to know:
+
+- **Start at login is on by default.** The first start adds Clipsy to your Windows login.
+  Untick **Start Clipsy when I sign in** in Settings to turn this off.
+- Starting `clipsy-windows.exe` again while Clipsy runs does not start a second copy. It
+  toggles the popup in the running copy.
+- The "Clipsy is running" message is only written to the console window. There is no on-screen notice yet.
+- If you move the program to another folder, start it once from the new place. While
+  autostart is on, the login entry is updated on each start. Clipsy also shows
 an icon in the system tray (the `^` arrow near the clock may hide it; drag it out to keep
 it visible). Copy something, then press **Ctrl+Shift+V** to open the popup. Press **Enter**
 to paste the selected item.
@@ -141,7 +151,7 @@ a change in Notepad using **File > Save as**, set **Save as type** to **All File
 Windows saves `config.toml.txt`. To check the name, run this in PowerShell; it should list `config.toml`:
 
 ```powershell
-dir $env:APPDATA\clipsy\config
+dir "$env:APPDATA\clipsy\config"
 ```
 
 **Logs:** Clipsy prints log messages only to the console window (there is no log file).

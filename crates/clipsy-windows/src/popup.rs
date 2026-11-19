@@ -26,7 +26,7 @@ use winreg::enums::HKEY_CURRENT_USER;
 use winreg::RegKey;
 
 use crate::backend::WindowsBackend;
-use crate::popup_state::{clamp_to_area, PopupState};
+use crate::popup_state::{clamp_to_area, selection_after_delete, PopupState};
 use crate::ui::{ClipPopup, RowData};
 
 /// Logical size of the popup. Keep in step with `width` / `height` in ui/popup.slint.
@@ -40,6 +40,8 @@ const PASTE_DELAY: Duration = Duration::from_millis(50);
 const ROW_LIMIT: usize = 200;
 /// Longest preview shown on one row, in characters.
 const PREVIEW_CHARS: usize = 160;
+/// Longest text shown in the preview panel (Space), in characters.
+const PREVIEW_PANEL_CHARS: usize = 2000;
 /// Gap between attempts to find the popup's window handle right after it is first shown.
 const RETRY_EVERY: Duration = Duration::from_millis(10);
 /// Attempts to find the popup's window handle right after it is first shown.
@@ -72,13 +74,26 @@ struct Inner {
     taskbar_hidden: Cell<bool>,
     /// Decoded thumbnails by file path.
     thumbs: RefCell<HashMap<PathBuf, slint::Image>>,
+    /// True while the preview panel is open. It then follows the selected row.
+    preview_open: Cell<bool>,
+    /// Run by the header's Settings button (the same action as the tray's Settings).
+    on_settings: Rc<dyn Fn()>,
+    /// Run by the header's Clear button (the same action as the tray's Clear).
+    on_clear: Rc<dyn Fn()>,
 }
 
 impl Popup {
     /// Create the popup window. The backend must already be started and its hotkeys registered.
+    /// `settings` and `clear` run when the header buttons are clicked.
     ///
     /// Panics if Slint cannot create a window, which means the GUI cannot run at all.
-    pub fn new(store: Rc<RefCell<Store>>, config: Rc<RefCell<Config>>, backend: Rc<WindowsBackend>) -> Self {
+    pub fn new(
+        store: Rc<RefCell<Store>>,
+        config: Rc<RefCell<Config>>,
+        backend: Rc<WindowsBackend>,
+        settings: Rc<dyn Fn()>,
+        clear: Rc<dyn Fn()>,
+    ) -> Self {
         let window = ClipPopup::new().unwrap_or_else(|e| {
             tracing::error!("could not create the popup window: {e}");
             panic!("could not create the popup window: {e}");
@@ -97,6 +112,9 @@ impl Popup {
             focus_pending: Cell::new(false),
             taskbar_hidden: Cell::new(false),
             thumbs: RefCell::new(HashMap::new()),
+            preview_open: Cell::new(false),
+            on_settings: settings,
+            on_clear: clear,
         });
         inner.connect();
         Self { inner }
@@ -170,6 +188,30 @@ impl Inner {
         });
 
         let w = me.clone();
+        self.window.on_delete_requested(move |index: i32| {
+            if let Ok(index) = usize::try_from(index) {
+                with_inner(&w, |i| i.delete(index));
+            }
+        });
+
+        let w = me.clone();
+        self.window.on_preview_toggled(move |index: i32| {
+            if let Ok(index) = usize::try_from(index) {
+                with_inner(&w, |i| i.toggle_preview(index));
+            }
+        });
+
+        let w = me.clone();
+        self.window.on_settings_requested(move || {
+            with_inner(&w, |i| (i.on_settings)());
+        });
+
+        let w = me.clone();
+        self.window.on_clear_requested(move || {
+            with_inner(&w, |i| (i.on_clear)());
+        });
+
+        let w = me.clone();
         self.window.on_hide_requested(move || {
             with_inner(&w, |i| i.hide());
         });
@@ -198,6 +240,8 @@ impl Inner {
         }
         self.window.set_query(SharedString::new());
         self.window.set_filter_index(0);
+        self.preview_open.set(false);
+        self.window.set_preview_text(SharedString::new());
         self.window.set_dark(use_dark(&theme));
         self.window.set_compact(compact);
         self.refresh();
@@ -263,6 +307,74 @@ impl Inner {
     fn sync_selection(&self) {
         let selected = self.state.borrow().selected;
         self.window.set_selected(i32::try_from(selected).unwrap_or(0));
+        self.update_preview();
+    }
+
+    /// While the preview panel is open, show the selected item in it. Otherwise do nothing.
+    fn update_preview(&self) {
+        if !self.preview_open.get() {
+            return;
+        }
+        let selected = self.state.borrow().selected_item().cloned();
+        let text = selected.map(|item| self.preview_text(&item)).unwrap_or_default();
+        self.window.set_preview_text(text.into());
+    }
+
+    /// Text for the preview panel: the full text of a text item, cut to `PREVIEW_PANEL_CHARS`,
+    /// or the row label for images and files.
+    fn preview_text(&self, item: &ClipItem) -> String {
+        if !matches!(item.kind, Kind::Text | Kind::Html) {
+            return row_text(item);
+        }
+        let full = self
+            .store
+            .borrow()
+            .plain_text(item.id)
+            .ok()
+            .flatten()
+            .filter(|text| !text.trim().is_empty())
+            .unwrap_or_else(|| item.preview.clone());
+        if full.trim().is_empty() {
+            return row_text(item);
+        }
+        if full.chars().count() > PREVIEW_PANEL_CHARS {
+            let cut: String = full.chars().take(PREVIEW_PANEL_CHARS).collect();
+            format!("{cut}...")
+        } else {
+            full
+        }
+    }
+
+    /// Space: open the preview of the row at `index`, or close it when it is open.
+    fn toggle_preview(&self, index: usize) {
+        if self.preview_open.get() {
+            self.preview_open.set(false);
+            self.window.set_preview_text(SharedString::new());
+            return;
+        }
+        if self.state.borrow().items.get(index).is_none() {
+            return;
+        }
+        self.preview_open.set(true);
+        self.update_preview();
+    }
+
+    /// Delete the row at `index` from the store, then keep the selection on a valid row.
+    fn delete(&self, index: usize) {
+        let (id, len) = {
+            let state = self.state.borrow();
+            match state.items.get(index) {
+                Some(item) => (item.id, state.items.len()),
+                None => return,
+            }
+        };
+        if let Err(e) = self.store.borrow().delete(id) {
+            tracing::warn!("could not delete clipboard item {id}: {e:#}");
+            return;
+        }
+        self.refresh();
+        self.state.borrow_mut().selected = selection_after_delete(index, len);
+        self.sync_selection();
     }
 
     fn row(&self, item: &ClipItem, show_source: bool) -> RowData {

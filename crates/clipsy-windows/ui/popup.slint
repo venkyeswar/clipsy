@@ -10,7 +10,7 @@ export struct RowData {
     thumb: image,
 }
 
-// One filter tab. Rust maps the index it reports (0 = All ... 4 = Pinned).
+// One filter pill. Rust maps the index it reports (0 = All ... 4 = Pinned).
 component FilterTab inherits Rectangle {
     in property <string> label;
     in property <bool> active;
@@ -18,17 +18,39 @@ component FilterTab inherits Rectangle {
     in property <color> muted-color;
     callback clicked();
 
-    height: 28px;
-    border-radius: 6px;
+    height: 26px;
+    border-radius: 13px;
     background: root.active ? root.accent : transparent;
     Text {
         text: root.label;
-        font-size: 13px;
+        font-size: 12px;
         color: root.active ? white : root.muted-color;
         horizontal-alignment: center;
         vertical-alignment: center;
     }
     TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+// A small text button in the header (Settings, Clear).
+component HeaderButton inherits Rectangle {
+    in property <string> label;
+    in property <color> muted-color;
+    in property <color> hover-color;
+    callback clicked();
+
+    height: 24px;
+    border-radius: 6px;
+    background: touch.has-hover ? root.hover-color : transparent;
+    Text {
+        text: root.label;
+        font-size: 12px;
+        color: root.muted-color;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
         clicked => { root.clicked(); }
     }
 }
@@ -46,6 +68,8 @@ export component ClipPopup inherits Window {
     in property <int> filter-index: 0;
     in property <bool> dark: false;
     in property <bool> compact: false;
+    // Full text of the selected item for the preview panel. Empty hides the panel.
+    in property <string> preview-text;
 
     // Rust owns the selection: keys ask for a move, and Rust sets `selected` back.
     callback query-edited(string);
@@ -53,6 +77,10 @@ export component ClipPopup inherits Window {
     callback move-selection(int);
     callback activate(int, bool);
     callback pin-toggled(int);
+    callback delete-requested(int);
+    callback preview-toggled(int);
+    callback settings-requested();
+    callback clear-requested();
     callback hide-requested();
 
     property <color> bg: root.dark ? #202124 : #ffffff;
@@ -96,6 +124,46 @@ export component ClipPopup inherits Window {
         padding: 12px;
         spacing: 8px;
 
+        // Header: the Clipsy logo and name, the item count, then Settings and Clear.
+        HorizontalLayout {
+            height: 24px;
+            spacing: 6px;
+            Image {
+                source: @image-url("../assets/clipsy-64.png");
+                width: 20px;
+                height: 20px;
+                image-fit: contain;
+            }
+            Text {
+                text: "Clipsy";
+                color: root.fg;
+                font-size: 13px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+            Text {
+                text: root.rows.length == 1 ? "1 item" : "\{root.rows.length} items";
+                color: root.muted;
+                font-size: 11px;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            HeaderButton {
+                label: "Settings";
+                width: 62px;
+                muted-color: root.muted;
+                hover-color: root.field-bg;
+                clicked => { root.settings-requested(); }
+            }
+            HeaderButton {
+                label: "Clear";
+                width: 50px;
+                muted-color: root.muted;
+                hover-color: root.field-bg;
+                clicked => { root.clear-requested(); }
+            }
+        }
+
         search := TextInput {
             text <=> root.query;
             font-size: 15px;
@@ -122,30 +190,29 @@ export component ClipPopup inherits Window {
                     root.hide-requested();
                     return accept;
                 }
+                // Delete removes the selected row only while the search box is empty, so it
+                // still edits the search text when there is a query.
+                if (event.text == Key.Delete && root.query == "" && root.rows.length > 0) {
+                    root.delete-requested(root.selected);
+                    return accept;
+                }
+                // Ctrl+P toggles the pin. The control character is accepted too, in case the
+                // key event reports Ctrl+P that way.
+                if (event.modifiers.control && (event.text == "p" || event.text == "P" || event.text == "\u{10}")) {
+                    root.pin-toggled(root.selected);
+                    return accept;
+                }
+                // Space previews the selected item, but only while the search box is empty.
+                if (event.text == " " && root.query == "" && root.rows.length > 0) {
+                    root.preview-toggled(root.selected);
+                    return accept;
+                }
                 return reject;
             }
         }
 
-        // Header: the Clipsy logo and name, above the filter tabs.
         HorizontalLayout {
-            spacing: 6px;
-            alignment: start;
-            Image {
-                source: @image-url("../assets/clipsy-64.png");
-                width: 20px;
-                height: 20px;
-                image-fit: contain;
-            }
-            Text {
-                text: "Clipsy";
-                color: root.fg;
-                font-size: 13px;
-                font-weight: 600;
-                vertical-alignment: center;
-            }
-        }
-
-        HorizontalLayout {
+            height: 26px;
             spacing: 4px;
             FilterTab {
                 label: "All";
@@ -203,6 +270,24 @@ export component ClipPopup inherits Window {
                         height: root.row-height;
                         border-radius: 6px;
                         background: index == root.selected ? root.row-selected : transparent;
+                        // The pin and delete buttons show only while the pointer is on the row.
+                        property <bool> hovered: row-touch.has-hover || pin-touch.has-hover || delete-touch.has-hover;
+
+                        // The whole row pastes on click. Declared first, so the buttons below sit on top.
+                        row-touch := TouchArea {
+                            width: parent.width;
+                            height: parent.height;
+                            clicked => { root.activate(index, false); }
+                        }
+
+                        // Accent edge on the left of pinned rows.
+                        if (row.pinned): Rectangle {
+                            x: 0px;
+                            y: 6px;
+                            width: 2px;
+                            height: parent.height - 12px;
+                            background: root.accent;
+                        }
 
                         // Kind label, or the image thumbnail for image items.
                         Rectangle {
@@ -250,30 +335,71 @@ export component ClipPopup inherits Window {
                             wrap: no-wrap;
                         }
 
+                        // Pin star: always shown on pinned rows, outline on hover otherwise.
                         Text {
-                            x: parent.width - 66px;
-                            width: 20px;
+                            x: parent.width - 62px;
+                            width: 24px;
                             height: parent.height;
+                            visible: row.pinned || parent.hovered;
                             text: row.pinned ? "★" : "☆";
                             color: row.pinned ? root.accent : root.muted;
                             font-size: 14px;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
-                        TouchArea {
-                            x: parent.width - 70px;
-                            width: 32px;
+                        pin-touch := TouchArea {
+                            x: parent.width - 62px;
+                            width: 24px;
                             height: parent.height;
+                            visible: row.pinned || parent.hovered;
                             clicked => { root.pin-toggled(index); }
                         }
 
-                        TouchArea {
-                            x: 0;
-                            width: parent.width - 70px;
+                        // Delete button, shown on hover only.
+                        Text {
+                            x: parent.width - 34px;
+                            width: 24px;
                             height: parent.height;
-                            clicked => { root.activate(index, false); }
+                            visible: parent.hovered;
+                            text: "×";
+                            color: root.muted;
+                            font-size: 16px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        delete-touch := TouchArea {
+                            x: parent.width - 34px;
+                            width: 24px;
+                            height: parent.height;
+                            visible: parent.hovered;
+                            clicked => { root.delete-requested(index); }
                         }
                     }
+                }
+            }
+        }
+
+        // Preview of the selected item (Space). Fixed height; long text scrolls inside it.
+        if (root.preview-text != ""): Rectangle {
+            height: 160px;
+            border-radius: 6px;
+            background: root.field-bg;
+            clip: true;
+
+            Flickable {
+                x: 10px;
+                y: 8px;
+                width: parent.width - 20px;
+                height: parent.height - 16px;
+                content-width: self.width;
+                content-height: preview-body.height;
+
+                preview-body := Text {
+                    width: parent.width;
+                    text: root.preview-text;
+                    color: root.fg;
+                    font-size: 12px;
+                    wrap: word-wrap;
                 }
             }
         }
@@ -285,6 +411,14 @@ export component ClipPopup inherits Window {
             font-size: 13px;
             horizontal-alignment: center;
             height: 40px;
+        }
+
+        Text {
+            text: "Enter paste   Shift+Enter plain   Delete remove";
+            color: root.muted;
+            font-size: 11px;
+            horizontal-alignment: center;
+            height: 18px;
         }
     }
 }

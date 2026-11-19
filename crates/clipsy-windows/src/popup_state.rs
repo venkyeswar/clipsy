@@ -65,6 +65,43 @@ impl PopupState {
     }
 }
 
+#[cfg(test)]
+mod delete_selection_tests {
+    use super::selection_after_delete;
+
+    #[test]
+    fn selection_after_delete_single_item_goes_to_zero() {
+        assert_eq!(selection_after_delete(0, 1), 0);
+    }
+
+    #[test]
+    fn selection_after_delete_last_row_moves_up() {
+        assert_eq!(selection_after_delete(4, 5), 3);
+    }
+
+    #[test]
+    fn selection_after_delete_middle_stays() {
+        assert_eq!(selection_after_delete(1, 5), 1);
+    }
+
+    #[test]
+    fn selection_after_delete_empty_is_zero() {
+        assert_eq!(selection_after_delete(0, 0), 0);
+    }
+}
+
+/// Selection index after the row at `selected` is deleted from a list of `len_before` rows.
+///
+/// Keeps the same row position when possible, otherwise moves up to the new last row. An empty
+/// result list gives 0.
+pub fn selection_after_delete(selected: usize, len_before: usize) -> usize {
+    if len_before <= 1 {
+        0
+    } else {
+        selected.min(len_before - 2)
+    }
+}
+
 /// Move a popup's top-left corner so the whole popup lies inside `area`.
 ///
 /// `area` is (left, top, right, bottom). When the popup is larger than the area, it is aligned

@@ -184,7 +184,21 @@ pub fn run(args: Vec<String>) -> Result<()> {
 
     // The popup creates the Slint window, which also starts Slint's backend on this thread.
     // The tray is created after that, so its menu messages are pumped by the Slint event loop.
-    let popup = Rc::new(Popup::new(store.clone(), config.clone(), backend.clone()));
+    // The popup's Settings and Clear buttons send the same verbs as the tray menu, so they run
+    // the same actions.
+    let popup_settings_verbs = verb_tx.clone();
+    let popup_clear_verbs = verb_tx.clone();
+    let popup = Rc::new(Popup::new(
+        store.clone(),
+        config.clone(),
+        backend.clone(),
+        Rc::new(move || {
+            let _ = popup_settings_verbs.send(Verb::Settings);
+        }),
+        Rc::new(move || {
+            let _ = popup_clear_verbs.send(Verb::Clear);
+        }),
+    ));
     let tray_verbs = verb_tx.clone();
     let tray = Rc::new(Tray::new(
         move |verb| {

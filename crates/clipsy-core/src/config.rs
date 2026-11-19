@@ -98,6 +98,9 @@ pub struct Shortcuts {
 impl Default for Shortcuts {
     fn default() -> Self {
         Self {
+            #[cfg(windows)]
+            toggle_popup: "<Ctrl><Shift>v".into(),
+            #[cfg(not(windows))]
             toggle_popup: "<Super><Shift>v".into(),
             clear_history: String::new(),
             pause_recording: String::new(),
@@ -209,6 +212,7 @@ pub fn data_dir() -> Result<PathBuf> {
 }
 
 /// Create `path` (and parents) with mode 0700. Succeeds if it already exists.
+#[cfg(unix)]
 pub(crate) fn ensure_private_dir(path: &Path) -> Result<()> {
     use std::os::unix::fs::DirBuilderExt;
     fs::DirBuilder::new()
@@ -216,6 +220,12 @@ pub(crate) fn ensure_private_dir(path: &Path) -> Result<()> {
         .mode(0o700)
         .create(path)
         .with_context(|| format!("creating {}", path.display()))
+}
+
+/// Create `path` (and parents). Windows has no unix mode bits; the user profile is already private.
+#[cfg(not(unix))]
+pub(crate) fn ensure_private_dir(path: &Path) -> Result<()> {
+    fs::create_dir_all(path).with_context(|| format!("creating {}", path.display()))
 }
 
 #[cfg(test)]
@@ -231,10 +241,17 @@ mod tests {
         assert_eq!(c.general.keep_days, 2);
         assert_eq!(c.general.keep_pinned_days, 10);
         assert_eq!(c.appearance.theme, "system");
+        #[cfg(not(windows))]
         assert_eq!(c.shortcuts.toggle_popup, "<Super><Shift>v");
         assert_eq!(c.shortcuts.clear_history, "");
         assert!(c.privacy.skip_sensitive);
         assert_eq!(c.privacy.ignored_apps.len(), 3);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_default_toggle_is_ctrl_shift_v() {
+        assert_eq!(Config::default().shortcuts.toggle_popup, "<Ctrl><Shift>v");
     }
 
     #[test]

@@ -8,7 +8,9 @@ license.workspace = true
 clipsy-core = { path = "../clipsy-core" }
 anyhow = "1"
 tracing = "0.1"
-x11rb = { version = "0.13", features = ["xfixes", "xtest", "xkb"] }
 serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { version = "0.13", features = ["xfixes", "xtest", "xkb"] }
 serde_json = "1"
 base64 = "0.22"

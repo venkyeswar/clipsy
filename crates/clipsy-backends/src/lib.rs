@@ -45,12 +45,16 @@ pub enum SetupNeeded {
 
 /// UUID of the companion GNOME Shell extension (directory name under
 /// `gnome-shell/extensions/`).
+#[cfg(target_os = "linux")]
 pub const GNOME_EXTENSION_UUID: &str = "clipsy@venkyeswar.github.io";
 
+#[cfg(target_os = "linux")]
 pub mod gnome;
+#[cfg(target_os = "linux")]
 pub mod x11;
 
 /// Message shown when the session is Wayland (no backend exists for it yet).
+#[cfg(target_os = "linux")]
 pub const WAYLAND_UNSUPPORTED: &str = "This Wayland desktop is not supported yet. Clipsy works on GNOME (Ubuntu's default desktop) and on Xorg.";
 
 /// Stand-in backend used when no real backend could start. Clipboard watching,
@@ -81,6 +85,7 @@ impl Backend for NoBackend {
 }
 
 /// True when `XDG_CURRENT_DESKTOP` (colon-separated, e.g. "ubuntu:GNOME") names GNOME.
+#[cfg(target_os = "linux")]
 fn is_gnome_desktop() -> bool {
     std::env::var("XDG_CURRENT_DESKTOP")
         .unwrap_or_default()
@@ -91,6 +96,7 @@ fn is_gnome_desktop() -> bool {
 /// Pick a backend for the current session: GNOME on Wayland uses the Shell extension,
 /// Xorg uses X11, other Wayland desktops are rejected (even when XWayland provides a
 /// DISPLAY). `CLIPSY_BACKEND=x11|gnome` forces a backend, for testing.
+#[cfg(target_os = "linux")]
 pub fn detect() -> anyhow::Result<Box<dyn Backend>> {
     match std::env::var("CLIPSY_BACKEND").unwrap_or_default().to_ascii_lowercase().as_str() {
         "x11" => return Ok(Box::new(x11::X11Backend::new()?)),
@@ -112,4 +118,10 @@ pub fn detect() -> anyhow::Result<Box<dyn Backend>> {
         return Ok(Box::new(x11::X11Backend::new()?));
     }
     anyhow::bail!("no supported session found (XDG_SESSION_TYPE is not x11 and DISPLAY is unset)")
+}
+
+/// No built-in backend exists off Linux yet. The Windows app supplies its own backend.
+#[cfg(not(target_os = "linux"))]
+pub fn detect() -> anyhow::Result<Box<dyn Backend>> {
+    anyhow::bail!("no built-in backend on this platform")
 }

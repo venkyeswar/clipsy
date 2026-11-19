@@ -14,7 +14,9 @@ use std::time::Duration;
 use anyhow::Result;
 use clipsy_backends::{Backend, PasteMode};
 use clipsy_core::{ClipItem, Config, Filter, Format, Kind, Store};
-use slint::{ComponentHandle, LogicalSize, ModelRc, PhysicalPosition, SharedString, Timer, TimerMode, VecModel};
+use slint::{
+    ComponentHandle, LogicalSize, ModelRc, PhysicalPosition, PhysicalSize, SharedString, Timer, TimerMode, VecModel,
+};
 use windows::core::w;
 use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST};
@@ -28,8 +30,8 @@ use winreg::RegKey;
 use crate::backend::WindowsBackend;
 use crate::paste::SendBlocked;
 use crate::popup_state::{
-    clamp_popup_size, clamp_to_area, clear_message, clearable_count, paste_mode_for, selection_after_delete,
-    PopupState,
+    clamp_to_area, clear_message, clearable_count, drag_popup_size, fit_size_to_area, paste_mode_for,
+    selection_after_delete, PopupState,
 };
 use crate::ui::{ClipPopup, RowData};
 
@@ -55,6 +57,9 @@ const RETRY_EVERY: Duration = Duration::from_millis(10);
 const RETRIES: u32 = 10;
 /// Decoded thumbnails kept in memory. The cache is cleared when it grows past this.
 const THUMB_CACHE_MAX: usize = 400;
+
+/// A running resize-grip drag: the cursor's screen position and the logical size, both at the press.
+type ResizeDrag = ((i32, i32), (f32, f32));
 
 /// The clipboard history popup. Cheap to call from the UI thread; all methods take `&self`.
 pub struct Popup {
@@ -88,6 +93,9 @@ struct Inner {
     /// Logical size of the window. Starts at the default and follows the resize grip. Kept only
     /// for this session; it is not saved to disk.
     size: Cell<(f32, f32)>,
+    /// Set while the resize grip is dragged: the cursor's screen position and the size at the
+    /// moment the drag started. `None` when no drag is running.
+    resize_drag: Cell<Option<ResizeDrag>>,
     /// Counts (total, pinned) taken when the clear overlay opened. The message is rebuilt from
     /// them when the checkbox changes.
     clear_counts: Cell<(usize, usize)>,
@@ -128,6 +136,7 @@ impl Popup {
             preview_open: Cell::new(false),
             on_settings: settings,
             size: Cell::new((POPUP_WIDTH, POPUP_HEIGHT)),
+            resize_drag: Cell::new(None),
             clear_counts: Cell::new((0, 0)),
             on_notice: notice,
         });
@@ -163,9 +172,9 @@ impl Popup {
     /// Show the popup (if hidden) with the clear-history confirmation open. Used by the tray,
     /// the hotkey, the CLI and the Settings window. Nothing is deleted until the user confirms.
     pub fn request_clear(&self) {
-        if !self.inner.window.window().is_visible() {
-            self.inner.show();
-        }
+        // `show` also brings an already visible popup to the front and gives it focus, so the
+        // overlay's keys work even when the popup was sitting behind another window.
+        self.show();
         self.inner.open_clear();
     }
 }
@@ -246,8 +255,13 @@ impl Inner {
         });
 
         let w = me.clone();
-        self.window.on_resize_by(move |dx: f32, dy: f32| {
-            with_inner(&w, |i| i.resize_by(dx, dy));
+        self.window.on_resize_started(move || {
+            with_inner(&w, |i| i.resize_started());
+        });
+
+        let w = me.clone();
+        self.window.on_resize_dragged(move || {
+            with_inner(&w, |i| i.resize_dragged());
         });
 
         let w = me.clone();
@@ -356,12 +370,46 @@ impl Inner {
         (count(Filter::All, "history"), count(Filter::Pinned, "pinned items"))
     }
 
-    /// Grow or shrink the window by a drag of the resize grip. The size is clamped and kept.
-    fn resize_by(&self, dx: f32, dy: f32) {
-        let (width, height) = self.size.get();
-        let (width, height) = clamp_popup_size(width + dx, height + dy);
-        self.size.set((width, height));
-        self.window.window().set_size(LogicalSize::new(width, height));
+    /// The resize grip was pressed: remember the cursor and the current size.
+    fn resize_started(&self) {
+        if let Some(cursor) = cursor_position() {
+            self.resize_drag.set(Some((cursor, self.size.get())));
+        }
+    }
+
+    /// The resize grip is being dragged: the size is the size at the press plus the cursor's
+    /// movement since then. The window stays on the work area; see `fit_to_work_area`.
+    fn resize_dragged(&self) {
+        let Some((cursor_start, size_start)) = self.resize_drag.get() else {
+            return;
+        };
+        let Some(cursor) = cursor_position() else {
+            return;
+        };
+        let scale = self.window.window().scale_factor();
+        let (width, height) = drag_popup_size(size_start, cursor_start, cursor, scale);
+        let size = self.fit_to_work_area(width, height);
+        self.size.set(size);
+    }
+
+    /// Apply a logical size to the window, capped to the work area of the monitor it is on,
+    /// and move the window up or left if the bigger size would go past the bottom or right edge.
+    /// A no-frame window has no other way to get back, so the grip has to stay on screen.
+    /// Returns the logical size that was applied.
+    fn fit_to_work_area(&self, width: f32, height: f32) -> (f32, f32) {
+        let window = self.window.window();
+        let scale = window.scale_factor();
+        let wanted = ((width * scale).round() as i32, (height * scale).round() as i32);
+        let position = window.position();
+        let Some(area) = work_area_at((position.x, position.y)) else {
+            window.set_size(LogicalSize::new(width, height));
+            return (width, height);
+        };
+        let fitted = fit_size_to_area(wanted, area);
+        let (x, y) = clamp_to_area((position.x, position.y), fitted, area);
+        window.set_size(PhysicalSize::new(fitted.0.max(1) as u32, fitted.1.max(1) as u32));
+        window.set_position(PhysicalPosition::new(x, y));
+        (fitted.0 as f32 / scale, fitted.1 as f32 / scale)
     }
 
     fn hide(&self) {
@@ -623,31 +671,15 @@ impl Inner {
         let (width, height) = self.size.get();
         let size = ((width * scale).round() as i32, (height * scale).round() as i32);
 
-        let mut cursor = POINT::default();
-        // SAFETY: GetCursorPos writes one POINT through the pointer, and `cursor` is a live local.
-        let have_cursor = unsafe { GetCursorPos(&mut cursor) }.is_ok();
-
-        // SAFETY: MonitorFromPoint takes the POINT by value and returns a monitor handle, or null.
-        let monitor = unsafe { MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST) };
-        let mut info = MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-            rcMonitor: RECT::default(),
-            rcWork: RECT::default(),
-            dwFlags: 0,
-        };
-        // SAFETY: `info` is a valid MONITORINFO with cbSize set to its size, as the call requires.
-        let found = unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool();
-        if !found {
-            // Without a work area, leave the position to Slint's default.
+        let cursor = cursor_position();
+        // Without a work area, leave the position to Slint's default.
+        let Some(area) = work_area_at(cursor.unwrap_or_default()) else {
             return;
-        }
-        let work = info.rcWork;
-        let area = (work.left, work.top, work.right, work.bottom);
+        };
 
-        let wanted = if centered || !have_cursor {
-            (area.0 + (area.2 - area.0 - size.0) / 2, area.1 + (area.3 - area.1 - size.1) / 2)
-        } else {
-            (cursor.x, cursor.y)
+        let wanted = match cursor {
+            Some(cursor) if !centered => cursor,
+            _ => (area.0 + (area.2 - area.0 - size.0) / 2, area.1 + (area.3 - area.1 - size.1) / 2),
         };
         let (x, y) = clamp_to_area(wanted, size, area);
         self.window.window().set_position(PhysicalPosition::new(x, y));
@@ -696,6 +728,30 @@ impl Inner {
         self.hwnd.set(found.0 as isize);
         Some(found)
     }
+}
+
+/// The mouse pointer's screen position, or `None` if Windows cannot say.
+fn cursor_position() -> Option<(i32, i32)> {
+    let mut cursor = POINT::default();
+    // SAFETY: GetCursorPos writes one POINT through the pointer, and `cursor` is a live local.
+    unsafe { GetCursorPos(&mut cursor) }.ok().map(|()| (cursor.x, cursor.y))
+}
+
+/// The work area (left, top, right, bottom, physical px) of the monitor nearest `point`, minus
+/// the taskbar. `None` if Windows gives no monitor information.
+fn work_area_at(point: (i32, i32)) -> Option<(i32, i32, i32, i32)> {
+    let point = POINT { x: point.0, y: point.1 };
+    // SAFETY: MonitorFromPoint takes the POINT by value and returns a monitor handle, or null.
+    let monitor = unsafe { MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST) };
+    let mut info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        rcMonitor: RECT::default(),
+        rcWork: RECT::default(),
+        dwFlags: 0,
+    };
+    // SAFETY: `info` is a valid MONITORINFO with cbSize set to its size, as the call requires.
+    let found = unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool();
+    found.then_some((info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom))
 }
 
 /// Keep the popup off the taskbar: add WS_EX_TOOLWINDOW and remove WS_EX_APPWINDOW.

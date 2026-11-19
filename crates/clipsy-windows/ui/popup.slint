@@ -112,8 +112,10 @@ export component ClipPopup inherits Window {
     callback settings-requested();
     callback clear-requested();
     callback hide-requested();
-    // The window's size changed by this much (logical px) while the resize grip was dragged.
-    callback resize-by(length, length);
+    // The resize grip was pressed, and then dragged. Rust measures the cursor on screen and
+    // sets the window size, so these carry no numbers.
+    callback resize-started();
+    callback resize-dragged();
 
     // Clear-history overlay. Rust sets the message and whether Clear is allowed, and handles
     // the confirm. Slint toggles the checkbox and closes the overlay on Cancel and Escape.
@@ -124,9 +126,6 @@ export component ClipPopup inherits Window {
     callback clear-also-pinned-changed(bool);
     callback clear-confirmed();
 
-    // Last pointer position (window coordinates) while the resize grip is dragged.
-    property <length> grip-x;
-    property <length> grip-y;
 
     property <color> bg: root.dark ? #202124 : #ffffff;
     property <color> fg: root.dark ? #f1f3f4 : #202124;
@@ -482,10 +481,10 @@ export component ClipPopup inherits Window {
         }
     }
 
-    // Resize grip in the bottom-right corner. Dragging it reports the pointer's movement. The
-    // pointer is measured in window coordinates, so the grip moving with the window does not
-    // change the measurement.
-    grip := Rectangle {
+    // Resize grip in the bottom-right corner. Pressing it starts a resize, and dragging it
+    // resizes the window. Rust reads the cursor on screen, so the grip moving with the window
+    // has no effect on the size.
+    Rectangle {
         x: root.width - 18px;
         y: root.height - 18px;
         width: 18px;
@@ -503,17 +502,12 @@ export component ClipPopup inherits Window {
             mouse-cursor: nwse-resize;
             pointer-event(event) => {
                 if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
-                    root.grip-x = self.absolute-position.x + self.mouse-x;
-                    root.grip-y = self.absolute-position.y + self.mouse-y;
+                    root.resize-started();
                 }
             }
             moved => {
                 if (self.pressed) {
-                    let now-x = self.absolute-position.x + self.mouse-x;
-                    let now-y = self.absolute-position.y + self.mouse-y;
-                    root.resize-by(now-x - root.grip-x, now-y - root.grip-y);
-                    root.grip-x = now-x;
-                    root.grip-y = now-y;
+                    root.resize-dragged();
                 }
             }
         }

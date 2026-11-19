@@ -141,6 +141,24 @@ pub fn clamp_popup_size(width: f32, height: f32) -> (f32, f32) {
     )
 }
 
+/// Popup size during a resize-grip drag: the size where the drag started, plus how far the
+/// cursor has moved since then (screen pixels, converted to logical with `scale`), clamped.
+/// Measuring from the start, not step by step, means a drag past a limit comes back as soon as
+/// the cursor comes back.
+pub fn drag_popup_size(start: (f32, f32), cursor_start: (i32, i32), cursor_now: (i32, i32), scale: f32) -> (f32, f32) {
+    let scale = if scale > 0.0 { scale } else { 1.0 };
+    let dx = (cursor_now.0 - cursor_start.0) as f32 / scale;
+    let dy = (cursor_now.1 - cursor_start.1) as f32 / scale;
+    clamp_popup_size(start.0 + dx, start.1 + dy)
+}
+
+/// Cap a popup size (physical px) to the size of the work area, so the popup cannot be bigger
+/// than the screen area it has to fit in. `area` is (left, top, right, bottom).
+pub fn fit_size_to_area(size: (i32, i32), area: (i32, i32, i32, i32)) -> (i32, i32) {
+    let (left, top, right, bottom) = area;
+    (size.0.min(right - left).max(0), size.1.min(bottom - top).max(0))
+}
+
 /// How many items a clear would remove. Pinned items are kept unless `also_pinned` is true.
 pub fn clearable_count(total: usize, pinned: usize, also_pinned: bool) -> usize {
     if also_pinned {
@@ -357,5 +375,37 @@ mod tests {
     fn popup_size_clamps_each_side_separately() {
         assert_eq!(clamp_popup_size(200.0, 800.0), (320.0, 800.0));
         assert_eq!(clamp_popup_size(700.0, 2000.0), (700.0, 1000.0));
+    }
+
+    #[test]
+    fn drag_size_is_start_plus_cursor_movement() {
+        // Cursor moves 50 px right and 20 px up, so the popup grows by the same amount.
+        assert_eq!(drag_popup_size((420.0, 520.0), (100, 100), (150, 80), 1.0), (470.0, 500.0));
+    }
+
+    #[test]
+    fn drag_size_converts_physical_cursor_movement_to_logical() {
+        // At 200% scale, 100 physical px of cursor movement is 50 logical px.
+        assert_eq!(drag_popup_size((420.0, 520.0), (0, 0), (100, 100), 2.0), (470.0, 570.0));
+    }
+
+    #[test]
+    fn drag_size_recovers_as_soon_as_pointer_comes_back_from_the_limit() {
+        // Overshooting the maximum does not lose the anchor: moving back in brings the size back.
+        let start = (420.0, 520.0);
+        assert_eq!(drag_popup_size(start, (0, 0), (1000, 0), 1.0).0, 900.0);
+        assert_eq!(drag_popup_size(start, (0, 0), (400, 0), 1.0).0, 820.0);
+        // Same for the minimum: overshoot down, then come back.
+        assert_eq!(drag_popup_size(start, (0, 0), (-1000, 0), 1.0).0, 320.0);
+        assert_eq!(drag_popup_size(start, (0, 0), (-100, 0), 1.0).0, 320.0);
+        assert_eq!(drag_popup_size(start, (0, 0), (-10, 0), 1.0).0, 410.0);
+    }
+
+    #[test]
+    fn fit_size_caps_each_side_to_the_work_area() {
+        // Work area 1920x1040 at the origin.
+        assert_eq!(fit_size_to_area((1000, 1200), (0, 0, 1920, 1040)), (1000, 1040));
+        assert_eq!(fit_size_to_area((2500, 500), (0, 0, 1920, 1040)), (1920, 500));
+        assert_eq!(fit_size_to_area((600, 400), (0, 0, 1920, 1040)), (600, 400));
     }
 }

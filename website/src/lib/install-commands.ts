@@ -121,6 +121,64 @@ export function windowsInstallSteps(release?: Release): InstallStep[] {
   ];
 }
 
+export const WINDOWS_COMING_SOON_NOTICE =
+  "The Windows download is coming soon. Until then, you can build Clipsy yourself on Windows with the steps below.";
+
+export const SMARTSCREEN_NOTE =
+  'Windows may say "unknown publisher" because the app is not code-signed yet. Click More info, then Run anyway.';
+
+export type WindowsInstallTab = {
+  id: "windows-installer" | "windows-portable" | "windows-verify" | "windows-source";
+  title: string;
+  /** "When to use this" line shown above the steps. */
+  when: string;
+  steps: InstallStep[];
+  /** Set while no Windows files are published: the tab shows this note above the build steps. */
+  notice?: string;
+  /** Every command in the steps, in order. */
+  commands: string[];
+};
+
+/**
+ * The Windows tabs. While no Windows release exists (comingSoon), the download tabs show a
+ * note and the build-from-source steps instead, so the page still gives a way to install.
+ */
+export function windowsInstallTabs(release?: Release, comingSoon = false): WindowsInstallTab[] {
+  const [installer, portable, verify, build, open] = windowsInstallSteps(release);
+  const buildSteps = [build, open];
+  const withNotice = (steps: InstallStep[]) =>
+    comingSoon ? { steps: buildSteps, notice: WINDOWS_COMING_SOON_NOTICE } : { steps };
+
+  const tabs: Omit<WindowsInstallTab, "commands">[] = [
+    {
+      id: "windows-installer",
+      title: "Installer",
+      when: "Recommended. Double-click the setup file and Clipsy installs for your user account.",
+      ...withNotice([installer]),
+    },
+    {
+      id: "windows-portable",
+      title: "Portable (.zip)",
+      when: "No install. Run Clipsy from a folder or a USB stick.",
+      ...withNotice([portable]),
+    },
+    {
+      id: "windows-verify",
+      title: "Verify download",
+      when: "Checks that the file you downloaded arrived complete and unchanged.",
+      ...withNotice([verify]),
+    },
+    {
+      id: "windows-source",
+      title: "Build from source",
+      when: "For developers. You need Rust with the MSVC toolchain (rustup.rs).",
+      steps: buildSteps,
+    },
+  ];
+
+  return tabs.map((tab) => ({ ...tab, commands: tab.steps.flatMap((step) => step.commands) }));
+}
+
 export function installCommands(
   channel: "stable" | "edge" | null,
   release?: Release,

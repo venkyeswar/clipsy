@@ -1,10 +1,11 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { InstallSection } from "./install-section";
 import { useReleases } from "@/hooks/use-releases";
 import { config } from "@/config";
 import type { Release } from "@/lib/releases";
+import { renderWithPlatform } from "@/test/render-with-platform";
 
 vi.mock("@/hooks/use-releases", () => ({ useReleases: vi.fn() }));
 const mockedUseReleases = vi.mocked(useReleases);
@@ -19,6 +20,17 @@ const release: Release = {
   tarball: { name: "clipsy-0.4.0-linux-x86_64.tar.gz", url: "https://example.test/clipsy.tar.gz", size: 1 },
 };
 
+const windowsRelease: Release = {
+  ...release,
+  windowsInstaller: { name: "clipsy-0.4.0-setup.exe", url: "https://example.test/setup.exe", size: 1 },
+  windowsPortable: { name: "clipsy-0.4.0-windows-x64.zip", url: "https://example.test/clipsy.zip", size: 1 },
+  sha256sums: { name: "SHA256SUMS", url: "https://example.test/SHA256SUMS", size: 1 },
+};
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
+
 afterEach(() => {
   cleanup();
   config.snap.channel = "edge";
@@ -26,7 +38,7 @@ afterEach(() => {
 
 it("renders_four_tabs_with_snap_edge", () => {
   mockedUseReleases.mockReturnValue({ releases: [release], status: "live" });
-  render(<InstallSection />);
+  renderWithPlatform(<InstallSection />);
   const tabs = screen.getAllByRole("tab");
   expect(tabs.map((tab) => tab.textContent)).toEqual([
     "Ubuntu App Center / Snap",
@@ -45,7 +57,7 @@ it("renders_four_tabs_with_snap_edge", () => {
 it("hides_snap_tab_when_channel_null", () => {
   config.snap.channel = null;
   mockedUseReleases.mockReturnValue({ releases: [release], status: "live" });
-  render(<InstallSection />);
+  renderWithPlatform(<InstallSection />);
   expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
     ".deb package",
     "No sudo",
@@ -56,7 +68,7 @@ it("hides_snap_tab_when_channel_null", () => {
 
 it("deb_tab_shows_releases_button_when_no_deb", async () => {
   mockedUseReleases.mockReturnValue({ releases: [{ ...release, deb: undefined }], status: "live" });
-  render(<InstallSection />);
+  renderWithPlatform(<InstallSection />);
   await userEvent.click(screen.getByRole("tab", { name: ".deb package" }));
   expect(screen.getByRole("link", { name: "View releases on GitHub" })).toHaveAttribute(
     "href",
@@ -67,7 +79,7 @@ it("deb_tab_shows_releases_button_when_no_deb", async () => {
 
 it("nosudo_tab_never_shows_releases_fallback", async () => {
   mockedUseReleases.mockReturnValue({ releases: [{ ...release, deb: undefined }], status: "live" });
-  render(<InstallSection />);
+  renderWithPlatform(<InstallSection />);
   await userEvent.click(screen.getByRole("tab", { name: "No sudo" }));
   const panel = screen.getByRole("tabpanel");
   expect(within(panel).queryByRole("link", { name: "View releases on GitHub" })).not.toBeInTheDocument();
@@ -77,7 +89,7 @@ it("nosudo_tab_never_shows_releases_fallback", async () => {
 
 it("shows_skeleton_not_fallback_while_loading", async () => {
   mockedUseReleases.mockReturnValue({ releases: [], status: "loading" });
-  const { container } = render(<InstallSection />);
+  const { container } = renderWithPlatform(<InstallSection />);
   await userEvent.click(screen.getByRole("tab", { name: ".deb package" }));
   expect(screen.queryByText(/No .deb package is published/)).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "View releases on GitHub" })).not.toBeInTheDocument();
@@ -87,7 +99,7 @@ it("shows_skeleton_not_fallback_while_loading", async () => {
 
 it("nosudo_tab_shows_numbered_steps_and_commands_while_loading", async () => {
   mockedUseReleases.mockReturnValue({ releases: [], status: "loading" });
-  render(<InstallSection />);
+  renderWithPlatform(<InstallSection />);
   await userEvent.click(screen.getByRole("tab", { name: "No sudo" }));
   const panel = screen.getByRole("tabpanel");
   expect(panel.querySelector('[data-slot="skeleton"]')).not.toBeInTheDocument();
@@ -112,7 +124,7 @@ it("nosudo_tab_shows_numbered_steps_and_commands_while_loading", async () => {
 
 it("deb_tab_shows_numbered_steps_with_release_commands", async () => {
   mockedUseReleases.mockReturnValue({ releases: [release], status: "live" });
-  render(<InstallSection />);
+  renderWithPlatform(<InstallSection />);
   await userEvent.click(screen.getByRole("tab", { name: ".deb package" }));
   const steps = screen.getByRole("list", { name: "Steps for .deb package" });
   expect(within(steps).getByText("wget https://example.test/clipsy.deb")).toBeInTheDocument();
@@ -122,7 +134,59 @@ it("deb_tab_shows_numbered_steps_with_release_commands", async () => {
 
 it("shows_after_installing_footer_with_shortcut", () => {
   mockedUseReleases.mockReturnValue({ releases: [release], status: "live" });
-  const { container } = render(<InstallSection />);
+  const { container } = renderWithPlatform(<InstallSection />);
   expect(screen.getByText("After installing:")).toBeInTheDocument();
   expect([...container.querySelectorAll("kbd")].map((key) => key.textContent)).toEqual(config.shortcut);
+});
+
+it("switching_to_windows_shows_windows_tabs", async () => {
+  mockedUseReleases.mockReturnValue({ releases: [windowsRelease], status: "live" });
+  renderWithPlatform(<InstallSection />);
+  await userEvent.click(screen.getByRole("button", { name: "Windows" }));
+  expect(screen.getByRole("button", { name: "Windows" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+    "Installer",
+    "Portable (.zip)",
+    "Verify download",
+    "Build from source",
+  ]);
+  expect(screen.getByRole("tab", { name: "Installer" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByText("clipsy-0.4.0-setup.exe", { exact: false })).toBeInTheDocument();
+});
+
+it("windows_verify_tab_shows_get_file_hash", async () => {
+  mockedUseReleases.mockReturnValue({ releases: [windowsRelease], status: "live" });
+  renderWithPlatform(<InstallSection />, "windows");
+  await userEvent.click(screen.getByRole("tab", { name: "Verify download" }));
+  expect(
+    screen.getByText("Get-FileHash .\\clipsy-0.4.0-setup.exe -Algorithm SHA256"),
+  ).toBeInTheDocument();
+});
+
+it("windows_download_tabs_show_coming_soon_and_build_steps_without_release", async () => {
+  mockedUseReleases.mockReturnValue({ releases: [release], status: "live" });
+  renderWithPlatform(<InstallSection />, "windows");
+  await userEvent.click(screen.getByRole("tab", { name: "Installer" }));
+  expect(screen.getByText("The Windows download is coming soon.", { exact: false })).toBeInTheDocument();
+  expect(screen.getByRole("list", { name: "Steps for Installer" })).toHaveTextContent("Or build from source");
+  expect(screen.getByText("cargo build --release -p clipsy-windows")).toBeInTheDocument();
+});
+
+it("windows_opens_on_build_from_source_when_coming_soon", () => {
+  mockedUseReleases.mockReturnValue({ releases: [release], status: "live" });
+  renderWithPlatform(<InstallSection />, "windows");
+  expect(screen.getByRole("tab", { name: "Build from source" })).toHaveAttribute("aria-selected", "true");
+});
+
+it("shows_smartscreen_note_on_windows_installer_tab", () => {
+  mockedUseReleases.mockReturnValue({ releases: [windowsRelease], status: "live" });
+  renderWithPlatform(<InstallSection />, "windows");
+  expect(screen.getByRole("note")).toHaveTextContent("unknown publisher");
+  expect(screen.getByRole("note")).toHaveTextContent("Run anyway");
+});
+
+it("shows_windows_shortcut_after_installing_on_windows", () => {
+  mockedUseReleases.mockReturnValue({ releases: [windowsRelease], status: "live" });
+  const { container } = renderWithPlatform(<InstallSection />, "windows");
+  expect([...container.querySelectorAll("kbd")].map((key) => key.textContent)).toEqual(["Ctrl", "Shift", "V"]);
 });

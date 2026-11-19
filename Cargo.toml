@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/clipsy-core", "crates/clipsy-backends", "crates/clipsy-app"]
+members = ["crates/clipsy-core", "crates/clipsy-backends", "crates/clipsy-app", "crates/clipsy-windows"]
 
 [workspace.package]
 version = "0.3.3"

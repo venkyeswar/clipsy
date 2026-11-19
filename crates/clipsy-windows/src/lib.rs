@@ -2,6 +2,7 @@
 
 pub mod formats;
 pub mod hotkey;
+pub mod logging;
 pub mod popup_state;
 pub mod settings;
 pub mod terminals;
@@ -20,6 +21,8 @@ pub mod paste;
 pub mod single_instance;
 #[cfg(windows)]
 pub mod tray;
+#[cfg(windows)]
+pub mod ui;
 
 #[cfg(test)]
 mod tests {

@@ -1,7 +1,8 @@
 import { ClipPopup, RowData } from "popup.slint";
+import { SettingsDialog } from "settings.slint";
 
-// Placeholder window. The real popup UI is added in a later task.
-export { ClipPopup, RowData }
+// Every component the Rust side uses is exported here; they are generated into `crate::ui`.
+export { ClipPopup, RowData, SettingsDialog }
 
 export component AppWindow inherits Window {
 }

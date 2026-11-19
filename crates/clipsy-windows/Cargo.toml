@@ -11,15 +11,16 @@ path = "src/main.rs"
 
 [dependencies]
 clipsy-core = { path = "../clipsy-core" }
-clipsy-backends = { path = "../clipsy-backends" }
 anyhow = "1"
 tracing = "0.1"
 image = { version = "0.25", default-features = false, features = ["png", "bmp"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "env-filter"] }
 
 [dev-dependencies]
 tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
+clipsy-backends = { path = "../clipsy-backends" }
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_System_DataExchange",

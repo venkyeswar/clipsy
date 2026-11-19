@@ -5,7 +5,9 @@
 //! UI thread, so the shared handles are plain `Rc` / `RefCell`.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::ffi::c_void;
+use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
@@ -18,16 +20,14 @@ use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST};
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowW, GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, SetForegroundWindow, SetWindowLongPtrW,
-    GWL_EXSTYLE, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+    ShowWindow, GWL_EXSTYLE, SW_HIDE, SW_SHOWNA, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
 };
 use winreg::enums::HKEY_CURRENT_USER;
 use winreg::RegKey;
 
 use crate::backend::WindowsBackend;
 use crate::popup_state::{clamp_to_area, PopupState};
-
-// Generates `ClipPopup` and `RowData` from ui/app.slint (compiled by build.rs on Windows).
-slint::include_modules!();
+use crate::ui::{ClipPopup, RowData};
 
 /// Logical size of the popup. Keep in step with `width` / `height` in ui/popup.slint.
 const POPUP_WIDTH: f32 = 420.0;
@@ -40,6 +40,12 @@ const PASTE_DELAY: Duration = Duration::from_millis(50);
 const ROW_LIMIT: usize = 200;
 /// Longest preview shown on one row, in characters.
 const PREVIEW_CHARS: usize = 160;
+/// Gap between attempts to find the popup's window handle right after it is first shown.
+const RETRY_EVERY: Duration = Duration::from_millis(10);
+/// Attempts to find the popup's window handle right after it is first shown.
+const RETRIES: u32 = 10;
+/// Decoded thumbnails kept in memory. The cache is cleared when it grows past this.
+const THUMB_CACHE_MAX: usize = 400;
 
 /// The clipboard history popup. Cheap to call from the UI thread; all methods take `&self`.
 pub struct Popup {
@@ -60,6 +66,12 @@ struct Inner {
     hwnd: Cell<isize>,
     /// True once the popup has been the foreground window since it was shown.
     focused: Cell<bool>,
+    /// Set on each show; the popup is then made foreground once its handle is known.
+    focus_pending: Cell<bool>,
+    /// True once the popup was hidden from the taskbar. The style stays on the window.
+    taskbar_hidden: Cell<bool>,
+    /// Decoded thumbnails by file path.
+    thumbs: RefCell<HashMap<PathBuf, slint::Image>>,
 }
 
 impl Popup {
@@ -67,7 +79,10 @@ impl Popup {
     ///
     /// Panics if Slint cannot create a window, which means the GUI cannot run at all.
     pub fn new(store: Rc<RefCell<Store>>, config: Rc<RefCell<Config>>, backend: Rc<WindowsBackend>) -> Self {
-        let window = ClipPopup::new().expect("could not create the popup window");
+        let window = ClipPopup::new().unwrap_or_else(|e| {
+            tracing::error!("could not create the popup window: {e}");
+            panic!("could not create the popup window: {e}");
+        });
         window.window().set_size(LogicalSize::new(POPUP_WIDTH, POPUP_HEIGHT));
         let inner = Rc::new_cyclic(|me| Inner {
             me: me.clone(),
@@ -79,6 +94,9 @@ impl Popup {
             watch: Timer::default(),
             hwnd: Cell::new(0),
             focused: Cell::new(false),
+            focus_pending: Cell::new(false),
+            taskbar_hidden: Cell::new(false),
+            thumbs: RefCell::new(HashMap::new()),
         });
         inner.connect();
         Self { inner }
@@ -173,17 +191,16 @@ impl Inner {
         self.window.set_compact(compact);
         self.refresh();
 
-        self.place(position == "center");
+        let centered = position == "center";
+        self.place(centered);
         if let Err(e) = self.window.show() {
             tracing::warn!("could not show the popup: {e}");
             return;
         }
-        if let Some(hwnd) = self.popup_hwnd() {
-            hide_from_taskbar(hwnd);
-            // SAFETY: `hwnd` is the popup's own window, found by its title. SetForegroundWindow
-            // only asks Windows to activate it; a refusal is harmless, so the result is ignored.
-            let _ = unsafe { SetForegroundWindow(hwnd) };
-        }
+        // The scale factor and size are final only once the window exists, so place it again.
+        self.place(centered);
+        self.focus_pending.set(true);
+        self.settle(RETRIES);
 
         self.focused.set(false);
         let me = self.me.clone();
@@ -207,18 +224,81 @@ impl Inner {
         };
         match found {
             Ok(items) => self.state.borrow_mut().set_items(items),
-            Err(e) => tracing::warn!("could not load clipboard history: {e:#}"),
+            Err(e) => {
+                // Drop the old items too, so a stale row id cannot be activated.
+                tracing::warn!("could not load clipboard history: {e:#}");
+                self.state.borrow_mut().set_items(Vec::new());
+            }
         }
         self.push_rows();
     }
 
-    /// Copy the state's items and selection into the Slint window.
+    /// Copy the state's items into the Slint window. Setting the rows resets the list's scroll
+    /// position, so only the refresh path calls this; moving the selection does not.
     fn push_rows(&self) {
         let show_source = self.config.borrow().appearance.show_source_app;
-        let state = self.state.borrow();
-        let rows: Vec<RowData> = state.items.iter().map(|item| to_row(item, show_source)).collect();
+        let rows: Vec<RowData> = self
+            .state
+            .borrow()
+            .items
+            .iter()
+            .map(|item| self.row(item, show_source))
+            .collect();
         self.window.set_rows(ModelRc::new(VecModel::from(rows)));
-        self.window.set_selected(i32::try_from(state.selected).unwrap_or(0));
+        self.sync_selection();
+    }
+
+    /// Copy only the selection into the Slint window. Slint scrolls to keep it visible.
+    fn sync_selection(&self) {
+        let selected = self.state.borrow().selected;
+        self.window.set_selected(i32::try_from(selected).unwrap_or(0));
+    }
+
+    fn row(&self, item: &ClipItem, show_source: bool) -> RowData {
+        let thumb = item.thumb_path.as_deref().and_then(|path| self.thumbnail(path));
+        to_row(item, show_source, thumb)
+    }
+
+    /// Decoded thumbnail for `path`. Cached, so refreshes and key presses do not decode it again.
+    fn thumbnail(&self, path: &Path) -> Option<slint::Image> {
+        let mut cache = self.thumbs.borrow_mut();
+        if let Some(image) = cache.get(path) {
+            return Some(image.clone());
+        }
+        let image = slint::Image::load_from_path(path).ok()?;
+        if cache.len() >= THUMB_CACHE_MAX {
+            cache.clear();
+        }
+        cache.insert(path.to_path_buf(), image.clone());
+        Some(image)
+    }
+
+    /// Hide the popup from the taskbar and make it foreground. Taskbar style is applied once. If
+    /// the handle is not found yet, retry shortly; the watch tick also calls this until it works.
+    fn settle(&self, tries_left: u32) {
+        if !self.window.window().is_visible() {
+            return;
+        }
+        let Some(hwnd) = self.popup_hwnd() else {
+            if tries_left > 0 {
+                let me = self.me.clone();
+                Timer::single_shot(RETRY_EVERY, move || {
+                    with_inner(&me, |i| i.settle(tries_left - 1));
+                });
+            } else {
+                tracing::debug!("the popup window was not found yet");
+            }
+            return;
+        };
+        if !self.taskbar_hidden.get() {
+            hide_from_taskbar(hwnd);
+            self.taskbar_hidden.set(true);
+        }
+        if self.focus_pending.replace(false) {
+            // SAFETY: `hwnd` is the popup's own window. SetForegroundWindow only asks Windows to
+            // activate it; a refusal is harmless, so the result is ignored.
+            let _ = unsafe { SetForegroundWindow(hwnd) };
+        }
     }
 
     fn set_query(&self, text: &str) {
@@ -240,7 +320,7 @@ impl Inner {
 
     fn move_selection(&self, delta: i32) {
         self.state.borrow_mut().move_selection(delta);
-        self.push_rows();
+        self.sync_selection();
     }
 
     /// Put the item at `index` on the clipboard, hide the popup and paste it into the window
@@ -249,8 +329,6 @@ impl Inner {
         let Some(item) = self.state.borrow().items.get(index).cloned() else {
             return;
         };
-        self.hide();
-
         let formats = match self.formats_for(item.id, plain) {
             Ok(formats) => formats,
             Err(e) => {
@@ -258,10 +336,12 @@ impl Inner {
                 return;
             }
         };
+        // Copy first. If that fails, the popup stays open and nothing is pasted.
         if let Err(e) = self.backend.set_clipboard(&formats) {
-            tracing::warn!("could not copy the item to the clipboard: {e:#}");
+            tracing::warn!("could not copy the item to the clipboard, so nothing was pasted: {e:#}");
             return;
         }
+        self.hide();
 
         let (paste_on_select, terminal_apps) = {
             let config = self.config.borrow();
@@ -306,6 +386,10 @@ impl Inner {
     }
 
     /// Position the popup: at the cursor (clamped into the monitor's work area), or centred.
+    ///
+    /// The size is `POPUP_*` logical pixels times the window's scale factor. The code assumes
+    /// per-monitor DPI awareness, which winit sets up, so physical pixels from Win32 match. The
+    /// scale is only right once the window exists, so `show` calls this again after showing.
     fn place(&self, centered: bool) {
         let scale = self.window.window().scale_factor();
         let size = ((POPUP_WIDTH * scale).round() as i32, (POPUP_HEIGHT * scale).round() as i32);
@@ -349,6 +433,10 @@ impl Inner {
             self.watch.stop();
             return;
         }
+        // Finish the taskbar style if the first attempts in `show` did not find the window.
+        if !self.taskbar_hidden.get() {
+            self.settle(0);
+        }
         // Without a handle there is nothing to compare against, so do not hide.
         let Some(hwnd) = self.popup_hwnd() else {
             return;
@@ -388,6 +476,13 @@ fn hide_from_taskbar(hwnd: HWND) {
         let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
         let style = (style | WS_EX_TOOLWINDOW.0 as isize) & !(WS_EX_APPWINDOW.0 as isize);
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style);
+    }
+    // Windows keeps a visible window's taskbar button until the window is hidden and shown again.
+    // SAFETY: ShowWindow only changes the visibility of the popup's own window. SW_SHOWNA shows it
+    // without activating it; the caller requests focus separately.
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_HIDE);
+        let _ = ShowWindow(hwnd, SW_SHOWNA);
     }
 }
 
@@ -430,9 +525,8 @@ fn filter_index(filter: Filter) -> i32 {
     }
 }
 
-/// Build one Slint row from a store item.
-fn to_row(item: &ClipItem, show_source: bool) -> RowData {
-    let thumb = item.thumb_path.as_ref().and_then(|path| slint::Image::load_from_path(path).ok());
+/// Build one Slint row from a store item and its already-decoded thumbnail, if any.
+fn to_row(item: &ClipItem, show_source: bool, thumb: Option<slint::Image>) -> RowData {
     RowData {
         preview: row_text(item).into(),
         kind: item.kind.as_str().into(),

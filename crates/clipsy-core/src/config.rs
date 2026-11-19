@@ -204,9 +204,11 @@ pub fn config_path() -> Result<PathBuf> {
     Ok(project_dirs()?.config_dir().join("config.toml"))
 }
 
-/// `~/.local/share/clipsy`, created with mode 0700 if missing.
+/// `~/.local/share/clipsy` on Linux, `%LOCALAPPDATA%\clipsy\data` on Windows (local, not
+/// roaming, so the history database does not sync with the profile). Created with mode 0700
+/// on Unix if missing.
 pub fn data_dir() -> Result<PathBuf> {
-    let dir = project_dirs()?.data_dir().to_path_buf();
+    let dir = project_dirs()?.data_local_dir().to_path_buf();
     ensure_private_dir(&dir)?;
     Ok(dir)
 }

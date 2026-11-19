@@ -3,6 +3,7 @@
 pub mod formats;
 pub mod hotkey;
 pub mod popup_state;
+pub mod settings;
 pub mod terminals;
 pub mod util;
 

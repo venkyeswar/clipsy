@@ -40,6 +40,15 @@
     <keyword>pin</keyword>
   </keywords>
   <releases>
+    <release version="0.4.3" date="2026-11-19">
+      <description>
+        <ul>
+          <li>Windows: Clipsy no longer opens a black command window.</li>
+          <li>Windows: Clipsy opens its history when you start it, and clicking the tray icon opens it too.</li>
+          <li>The website always shows the newest version and has a simpler light/dark button.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.4.2" date="2026-11-19">
       <description>
         <ul>

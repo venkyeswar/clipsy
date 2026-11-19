@@ -73,7 +73,7 @@ it("hides_missing_asset_buttons", () => {
   const block = screen.getByRole("heading", { name: "Clipsy 0.4.0" }).closest("[data-release-block]");
   expect(block).not.toBeNull();
   const latestBlock = within(block as HTMLElement);
-  expect(latestBlock.getByRole("link", { name: "Download .deb for 0.4.0" })).toBeInTheDocument();
+  expect(latestBlock.getByRole("link", { name: "Download .deb, version 0.4.0" })).toBeInTheDocument();
   expect(latestBlock.queryByRole("link", { name: /tarball/i })).not.toBeInTheDocument();
   expect(latestBlock.queryByRole("link", { name: /SHA256SUMS/ })).not.toBeInTheDocument();
   expect(latestBlock.queryByText(/sha256sum -c/)).not.toBeInTheDocument();
@@ -109,7 +109,7 @@ it("lists_previous_versions_excluding_latest", () => {
   expect(within(rows[0]).getByText("0.5.0-rc.1")).toBeInTheDocument();
   expect(within(rows[1]).getByText("0.3.1")).toBeInTheDocument();
   expect(within(rows[0]).getByText("Not available")).toBeInTheDocument();
-  expect(within(rows[1]).getByRole("link", { name: "Download .deb for 0.3.1" })).toBeInTheDocument();
+  expect(within(rows[1]).getByRole("link", { name: ".deb, version 0.3.1" })).toBeInTheDocument();
   expect(within(table).queryByText("0.4.0")).not.toBeInTheDocument();
 });
 
@@ -139,12 +139,12 @@ it("card_shows_linux_and_windows_files_with_sizes", () => {
   mockedUseReleases.mockReturnValue({ releases: [withWindows, older], status: "live" });
   renderWithPlatform(<DownloadsSection />);
   const block = screen.getByRole("heading", { name: "Clipsy 0.4.0" }).closest("[data-release-block]") as HTMLElement;
-  expect(within(block).getByRole("link", { name: "Download .deb for 0.4.0" })).toBeInTheDocument();
-  expect(within(block).getByRole("link", { name: "Download Windows installer for 0.4.0" })).toHaveAttribute(
+  expect(within(block).getByRole("link", { name: "Download .deb, version 0.4.0" })).toBeInTheDocument();
+  expect(within(block).getByRole("link", { name: "Installer (.exe), Windows setup for 0.4.0" })).toHaveAttribute(
     "href",
     "https://example.test/clipsy-0.4.0-setup.exe",
   );
-  expect(within(block).getByRole("link", { name: "Download Windows portable zip for 0.4.0" })).toBeInTheDocument();
+  expect(within(block).getByRole("link", { name: "Portable (.zip), Windows for 0.4.0" })).toBeInTheDocument();
   expect(within(block).getAllByText("4.2 MB")).toHaveLength(4);
   expect(within(block).queryByText("Coming soon")).not.toBeInTheDocument();
 });
@@ -176,7 +176,7 @@ it("previous_versions_table_has_a_windows_column", () => {
   const table = screen.getByRole("table", { name: "Previous versions" });
   expect(within(table).getByRole("columnheader", { name: "Windows" })).toBeInTheDocument();
   const [olderRow, preRow] = within(table).getAllByRole("row").slice(1);
-  expect(within(olderRow).getByRole("link", { name: "Download Windows installer for 0.3.1" })).toHaveAttribute(
+  expect(within(olderRow).getByRole("link", { name: ".exe, Windows installer for 0.3.1" })).toHaveAttribute(
     "href",
     "https://example.test/clipsy-0.3.1-setup.exe",
   );

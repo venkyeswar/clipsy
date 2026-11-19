@@ -120,7 +120,7 @@ function ReleaseBlock({
 
       <PlatformFiles title="Linux">
         {deb ? (
-          <AssetButton asset={deb} label={`Download .deb for ${version}`} text="Download .deb" />
+          <AssetButton asset={deb} label={`Download .deb, version ${version}`} text="Download .deb" />
         ) : (
           <p className="text-sm text-muted-foreground">No .deb package for this version.</p>
         )}
@@ -130,7 +130,7 @@ function ReleaseBlock({
         {windowsInstaller && (
           <AssetButton
             asset={windowsInstaller}
-            label={`Download Windows installer for ${version}`}
+            label={`Installer (.exe), Windows setup for ${version}`}
             text="Installer (.exe)"
           />
         )}
@@ -138,7 +138,7 @@ function ReleaseBlock({
           <AssetButton
             asset={windowsPortable}
             variant="outline"
-            label={`Download Windows portable zip for ${version}`}
+            label={`Portable (.zip), Windows for ${version}`}
             text="Portable (.zip)"
           />
         )}
@@ -150,7 +150,7 @@ function ReleaseBlock({
           <AssetButton
             asset={sums}
             variant="secondary"
-            label={`Download SHA256SUMS for ${version}`}
+            label={`SHA256SUMS, checksums for ${version}`}
             text="SHA256SUMS"
           />
         </div>
@@ -338,7 +338,7 @@ export function DownloadsSection() {
                   <TableCell>
                     <AssetLink
                       asset={release.deb}
-                      label={`Download .deb for ${release.version}`}
+                      label={`.deb, version ${release.version}`}
                       text=".deb"
                     />
                   </TableCell>
@@ -346,7 +346,7 @@ export function DownloadsSection() {
                     {release.windowsInstaller ? (
                       <TableLink
                         href={release.windowsInstaller.url}
-                        label={`Download Windows installer for ${release.version}`}
+                        label={`.exe, Windows installer for ${release.version}`}
                         text=".exe"
                       />
                     ) : (

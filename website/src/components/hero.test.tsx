@@ -98,3 +98,12 @@ it("shows_the_shortcut_for_the_selected_platform", () => {
     "V",
   ]);
 });
+
+it("hides_the_no_sudo_link_on_windows", () => {
+  mockedUseReleases.mockReturnValue({ releases: [withWindows], status: "live" });
+  const { unmount } = renderWithPlatform(<Hero />, "windows");
+  expect(screen.queryByText(/Can't use sudo/)).not.toBeInTheDocument();
+  unmount();
+  renderWithPlatform(<Hero />, "linux");
+  expect(screen.getByText(/Can't use sudo/)).toBeInTheDocument();
+});

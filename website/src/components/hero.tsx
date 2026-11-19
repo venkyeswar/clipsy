@@ -156,12 +156,14 @@ export function Hero() {
           >
             Other ways to install
           </a>
-          <a
-            href="#install"
-            className="inline-flex min-h-11 items-center font-medium text-secondary-accent underline decoration-1 underline-offset-4 hover:decoration-2"
-          >
-            Can't use sudo? Install to your home folder.
-          </a>
+          {platform !== "windows" && (
+            <a
+              href="#install"
+              className="inline-flex min-h-11 items-center font-medium text-secondary-accent underline decoration-1 underline-offset-4 hover:decoration-2"
+            >
+              Can't use sudo? Install to your home folder.
+            </a>
+          )}
         </div>
       </div>
 

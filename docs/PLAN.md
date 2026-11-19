@@ -302,19 +302,20 @@ Each phase: implement → `cargo clippy -- -D warnings` + `cargo test` clean →
 - [ ] Verify size/perf budgets (§13).
 
 ### Phase W — Windows (`crates/clipsy-windows`)
-Built as a native Windows app. Manual checks are in `docs/windows-acceptance.md`; the user runs them on Windows 10/11 and confirms before Phase 2 starts.
-- Clipboard listener: text, images and file lists are saved; password-manager clips are skipped.
-- Global hotkey, default **`Ctrl+Shift+V`** (Windows reserves `Win+V`, so Clipsy cannot use it). Set in `config.toml`.
-- Auto-paste: Ctrl+V, or Ctrl+Shift+V in terminal apps.
-- System tray icon with menu: Open, Pause/Resume capture, Settings, Clear history, Quit.
-- Autostart at login via the `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registry key.
-- Single instance: a second start does not add a second tray icon. CLI verbs (`toggle`, `settings`, `pause`, `resume`, `clear`, `quit`) go to the running copy.
-- Slint popup (search, pins, text/image/file rows, keyboard navigation, closes on focus loss) and Settings window, light/dark/system theme.
-- Data: `%LOCALAPPDATA%\clipsy`. Config: `%APPDATA%\clipsy\config.toml`.
+Windows is developed in its own crate with a native Slint UI. Manual checks are in `docs/windows-acceptance.md`; the user runs them on Windows 10/11.
 
-Still to do after the user confirms the Windows acceptance checks (do not start before):
-- Phase 2 website: responsive layout and Windows download/install content.
-- Phase 3 release automation: Setup installer and portable `.exe` (zip), `SHA256SUMS`, GitHub Releases, website deploy on Cloudflare.
+- **W1 Windows app (done, untested on Windows).** The code compiles and the app is wired together, but it has only been compile-checked, never run on Windows. Expect bugs; the acceptance checklist exists to find them. What it contains:
+  - Clipboard listener: text, images and file lists are saved; password-manager clips are skipped.
+  - Global hotkey, default **`Ctrl+Shift+V`** (Windows reserves `Win+V`, so Clipsy cannot use it). Set in the Settings window or `config.toml`.
+  - Auto-paste: Ctrl+V, or Ctrl+Shift+V in terminal apps.
+  - System tray icon with menu: Open, Pause/Resume capture, Settings, Clear history, Quit.
+  - Autostart at login via the `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registry key.
+  - Single instance: a second start does not add a second tray icon. CLI verbs (`toggle`, `settings`, `pause`, `resume`, `clear`, `quit`) go to the running copy.
+  - Slint popup (search, pins, text/image/file rows, keyboard navigation, closes on focus loss) and Settings window, light/dark/system theme.
+  - Data: `%LOCALAPPDATA%\clipsy\data`. Config: `%APPDATA%\clipsy\config\config.toml`.
+  - Known limits: the app runs as a console program (a console window stays open, including at login with autostart on); logs go only to that console window.
+- **W2 website** (not started; waits until the user confirms W1 on Windows): responsive layout and Windows download/install content.
+- **W3 release automation** (not started): installer + portable `.exe` (zip), `SHA256SUMS` on GitHub Releases, website deploy on Cloudflare.
 
 ## 12. Manual test checklist
 Apps: Firefox, Chrome, Terminal (gnome-terminal / ptyxis), VS Code, LibreOffice Writer, GIMP, Nautilus, Screenshot tool, Text Editor.

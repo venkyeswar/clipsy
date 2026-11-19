@@ -3,18 +3,21 @@
 Run these checks on Windows 10 or 11. Go through them in order. For each item, write
 **pass** or **fail** and, for a fail, what you saw instead.
 
-Clipsy is not finished until you have run this list and told us the results. Do not
-start the website work until then.
+Important: the Windows version has **never been run on a real Windows PC**. The code
+compiles, but bugs are expected. This checklist exists to find them, so a fail is a
+useful result. Do not worry about breaking anything.
+
+Clipsy is not finished until you have run this list and sent us the results. The
+website work waits until then.
 
 ## Before you start
 
 1. Find your Windows version: press the **Windows** key, type `winver`, press **Enter**.
    Write down the version shown (for example, "Windows 11, version 24H2").
-2. Build Clipsy, or get `clipsy-windows.exe` from the person who built it. The README
-   section "Windows (experimental)" explains the build. The program is at
-   `target\release\clipsy-windows.exe`.
+2. Get the project and build Clipsy. The README section "Windows (experimental)" explains
+   each step. When it is built, the program is `target\release\clipsy-windows.exe`.
 3. Open **PowerShell** (press the **Windows** key, type `powershell`, press **Enter**).
-4. Go to the folder that holds the Clipsy project:
+4. Go to the project folder (the one you cloned or unzipped), for example:
 
    ```powershell
    cd C:\Users\<your-name>\clipsy
@@ -26,21 +29,35 @@ start the website work until then.
    .\target\release\clipsy-windows.exe quit
    ```
 
-6. Optional, for more detail: if a check says "logs", run this line in the same
-   PowerShell window **before** starting Clipsy. Logs then appear in that window:
-
-   ```powershell
-   $env:RUST_LOG = "debug"
-   ```
-
-7. Start Clipsy normally:
+6. Start Clipsy normally:
 
    ```powershell
    .\target\release\clipsy-windows.exe
    ```
 
-   A Clipsy icon appears in the system tray, near the clock. If you do not see it,
-   click the `^` arrow to show hidden icons.
+   A **console window** stays open while Clipsy runs. Leave it open. Clipsy also shows an
+   icon in the system tray, near the clock. If you do not see the icon, click the `^` arrow
+   to show hidden icons.
+
+7. The settings file is created the first time Clipsy starts. Check that it exists:
+
+   ```powershell
+   dir $env:APPDATA\clipsy\config
+   ```
+
+   Expected: a file named `config.toml` is listed.
+
+**Logs:** Clipsy prints its log messages only in the console window. There is no log file.
+If a check asks for logs, close Clipsy, then set the log level in PowerShell **before**
+starting it again:
+
+```powershell
+$env:CLIPSY_LOG = "debug"
+.\target\release\clipsy-windows.exe
+```
+
+Read the log lines in that console window. Copy any that mention `warn`, `error` or
+`paste` for your report.
 
 Unless a check says otherwise, keep Clipsy running for the whole list.
 
@@ -70,6 +87,11 @@ Expected: the popup opens next to the mouse pointer, not in the middle of the sc
 
 ### 3. Enter pastes into Notepad and into Windows Terminal
 
+Background: pressing **Ctrl+Shift+V** only **opens** the popup. Clipsy pastes after you press
+**Enter** on an item. It then sends its own paste key: **Ctrl+Shift+V** in terminal apps,
+and **Ctrl+V** everywhere else. So a first press of **Ctrl+Shift+V** that only opens the
+popup is correct.
+
 Steps for Notepad:
 1. Open **Notepad**. Type `Clipsy paste test`, select it, press **Ctrl+C**.
 2. Click in an empty line of Notepad.
@@ -82,10 +104,10 @@ Steps for Windows Terminal:
 1. Keep the text from the Notepad steps copied (or copy it again).
 2. Press the **Windows** key, type `terminal`, press **Enter** to open Windows Terminal.
 3. Click inside the terminal window.
-4. Press **Ctrl+Shift+V**, select the newest item, press **Enter**.
+4. Press **Ctrl+Shift+V** to open the popup, select the newest item, press **Enter**.
 
 Expected: the text appears at the terminal prompt. It is pasted but not run: the command
-does not start by itself. (Clipsy uses Ctrl+Shift+V for terminals.)
+does not start by itself.
 
 ### 4. Pin and search work
 
@@ -138,35 +160,35 @@ Steps:
 Expected: `should not be saved` is **not** in the list (step 4). `should be saved` **is**
 in the list (step 7). The menu label changes between "Pause capture" and "Resume capture".
 
-### 7. Launch at login (autostart) adds and removes the Run entry
+### 7. "Start Clipsy when I sign in" adds and removes the Run entry
 
 Steps:
-1. Right-click the tray icon, click **Settings**.
-2. Turn **on** the switch for **launch at login** (or autostart).
-3. In PowerShell, run:
+1. Right-click the tray icon, click **Settings**. The window title is **Clipsy settings**.
+2. In the **General** group, tick the checkbox **Start Clipsy when I sign in**.
+3. Click **Save** at the bottom of the window.
+4. In PowerShell, run:
 
    ```powershell
    Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name Clipsy
    ```
 
-4. Go back to Settings and turn the switch **off**.
-5. Run the same command again.
+5. Open Settings again, **untick** **Start Clipsy when I sign in**, click **Save**.
+6. Run the same command again.
 
-Expected: after step 3, the output shows a `Clipsy` line with a path to `clipsy-windows.exe`.
-After step 5, PowerShell shows an error saying the property `Clipsy` does not exist.
+Expected: after step 4, the output shows a `Clipsy` line with a path to `clipsy-windows.exe`.
+After step 6, PowerShell shows an error saying the property `Clipsy` does not exist.
 
-If Settings has no such switch, write that down and skip to the next check.
+### 8. A password copied from a password manager is not saved
 
-### 8. A password from a password manager is not saved
-
-Use a **test** entry in the password manager. Do not paste real passwords into Notepad.
-This check works with KeePassXC, 1Password or Bitwarden. These apps mark the copied
-password so Clipsy skips it.
+Use a **test** entry in your password manager. Do not paste real passwords into Notepad.
+Clipsy skips only copies from apps that set the Windows clipboard-exclusion flag. Password
+managers such as KeePassXC, 1Password or Bitwarden may do this. If your manager does not
+set the flag, this check cannot pass, so write down which manager you used.
 
 Steps:
-1. Press **Ctrl+Shift+V** and write down the newest item (or take a screenshot of the list).
+1. Press **Ctrl+Shift+V** and write down the newest item (or take a screenshot of the list). Press **Escape**.
 2. Open your password manager. Select a test entry. Copy its password
-   (in KeePassXC: right-click the entry, then **Copy password**).
+   (for example in KeePassXC: right-click the entry, then **Copy password**).
 3. Press **Ctrl+Shift+V** again.
 
 Expected: the password is **not** in the list. The newest item is the same as before.
@@ -190,8 +212,8 @@ Steps:
 3. Look at the tray. Also click the `^` arrow to check the hidden icons.
 4. Press **Ctrl+Shift+V**.
 
-Expected: there is **one** Clipsy icon in the tray, not two. The popup still opens with Ctrl+Shift+V.
-The second copy closes by itself.
+Expected: there is **one** Clipsy icon in the tray, not two. The popup still opens with
+Ctrl+Shift+V. The second copy exits by itself, so its console window may close quickly.
 
 ### 10. No network connections
 
@@ -226,7 +248,7 @@ Steps:
 Expected: Excel does not freeze. Clipsy does not close and does not show a "Not responding"
 message. The popup opens. Items copied from Excel appear in the list (they may be missing
 if Excel was very busy; that is acceptable, but Clipsy must keep running).
-If you run Clipsy with logs on, a line such as `reading clipboard failed` may appear. That is fine.
+With logs on, a line such as `reading clipboard failed` may appear in the console. That is fine.
 
 ### 13. Pasting into an administrator window does not crash Clipsy
 
@@ -241,7 +263,7 @@ Steps:
 
 Expected: Clipsy does **not** crash and its tray icon stays. The text may **not** paste into the
 administrator window. This is a known limit (see the README). Write down whether the text pasted.
-If logs are on, copy any line that mentions "paste" or "SendInput" into your report.
+With logs on, copy any console line that mentions "paste" or "SendInput" into your report.
 
 ### 14. Target window closed before pressing Enter: no crash, no typing into the popup
 
@@ -260,24 +282,41 @@ appears in the popup. Ctrl+Shift+V still opens the popup afterwards.
 
 Steps:
 1. Right-click the tray icon, click **Settings**.
-2. Try to set the shortcut to **Win+V** (or to any shortcut another running app already uses).
-   If Settings has no shortcut field, do this instead:
-   - Quit Clipsy (`.\target\release\clipsy-windows.exe quit`).
-   - Open Notepad, choose **File > Open**, type `%APPDATA%\clipsy\config.toml` in the file name box and press **Enter**. In the `[shortcuts]` section, change `toggle_popup` to `"<Super>v"`. Save with **Ctrl+S**.
-   - Start Clipsy again.
-3. Read the message that Clipsy shows.
-4. Close Settings. Press **Ctrl+Shift+V**.
+2. In the **Shortcuts** group, click in the field labelled **Show popup**. Select the text
+   and type `<Super>v` (this is Win+V, which Windows reserves).
+3. Click **Save** at the bottom of the window.
+4. Read the message. It appears in red under the **Show popup** field, or at the bottom of the window.
+5. If Settings closed or the message is not clear, note what you saw.
+6. Click **Cancel** (or close Settings) and press **Ctrl+Shift+V**.
 
 Expected: a clear message says the shortcut cannot be used or is already taken. Clipsy keeps
 running and the tray works. **Ctrl+Shift+V** still opens the popup.
-If the Win+V shortcut appears to work, write that down.
-Afterwards, set `toggle_popup` back to `"<Ctrl><Shift>v"` in `config.toml` and restart Clipsy.
+If the Win+V shortcut appears to work, write that down. Then set the **Show popup** field back to
+`<Ctrl><Shift>v` (or edit `config.toml`), click **Save**, and restart Clipsy.
+
+Steps if Settings does not let you save (or you want to test a startup problem):
+1. Quit Clipsy: `.\target\release\clipsy-windows.exe quit`.
+2. Open Notepad. Click **File**, then **Open**. In the file name box type
+   `%APPDATA%\clipsy\config\config.toml` and press **Enter**.
+3. Under `[shortcuts]`, change `toggle_popup` to `"<Super>v"`. Click **File**, then **Save as**.
+   Set **Save as type** to **All Files**, keep the name `config.toml`, click **Save** and confirm the overwrite.
+4. Check the file name:
+
+   ```powershell
+   dir $env:APPDATA\clipsy\config
+   ```
+
+   Expected: `config.toml`, **not** `config.toml.txt`.
+5. Start Clipsy again. Note whether it starts, and whether it shows an error.
+6. Change `toggle_popup` back to `"<Ctrl><Shift>v"`, save the same way (**Save as**, **All Files**), and restart Clipsy.
+
+Expected: Clipsy still starts and the tray icon works, even with a bad shortcut.
 
 ### 16. The `toggle` command opens and closes the popup
 
 Steps:
 1. Keep Clipsy running. Open a **second** PowerShell window (normal, not "Run as administrator").
-2. Go to the Clipsy folder and run:
+2. Go to the project folder and run:
 
    ```powershell
    .\target\release\clipsy-windows.exe toggle
@@ -287,7 +326,7 @@ Steps:
 
 Expected: the first `toggle` opens the popup. The second `toggle` closes it.
 
-### 17. Pause label is right after a restart when paused is set in config.toml
+### 17. Tray label is right after a restart when paused is set in config.toml
 
 Steps:
 1. Quit Clipsy:
@@ -296,31 +335,48 @@ Steps:
    .\target\release\clipsy-windows.exe quit
    ```
 
-2. Open `%APPDATA%\clipsy\config.toml` in Notepad. If the file does not exist, create it:
-   - Open Notepad, type the lines below, then choose **File > Save as**.
-   - In the address bar type `%APPDATA%\clipsy` and press **Enter**. Create the `clipsy` folder if it asks.
-   - File name: `config.toml`. Encoding: **UTF-8**. Click **Save**.
+2. Open `%APPDATA%\clipsy\config\config.toml` in Notepad: press **Windows+R**, type
+   `%APPDATA%\clipsy\config`, press **Enter**, then double-click `config.toml`.
+   (Clipsy creates this file the first time it starts. If it is missing, start Clipsy once, then quit it.)
+3. Find the `[privacy]` section. Change `paused = false` to `paused = true`.
+   If there is no `paused` line, add this under `[privacy]`:
 
    ```toml
-   [privacy]
    paused = true
    ```
 
-3. Save the file and start Clipsy again.
-4. Right-click the tray icon.
-5. Copy the text `paused test` in Notepad, then press **Ctrl+Shift+V**.
-6. Quit Clipsy, set `paused = false` in `config.toml`, and start Clipsy again.
+4. In Notepad, click **File**, then **Save as**. Set **Save as type** to **All Files**.
+   Keep the file name `config.toml`. Click **Save** and confirm the overwrite.
+5. Check the file name. In PowerShell run:
+
+   ```powershell
+   dir $env:APPDATA\clipsy\config
+   ```
+
+   Expected: the file is `config.toml`, **not** `config.toml.txt`. If you see `.txt`, rename it
+   to `config.toml` and tell us.
+6. Start Clipsy again:
+
+   ```powershell
+   .\target\release\clipsy-windows.exe
+   ```
+
+7. Right-click the tray icon. Copy the text `paused test` in Notepad, then press **Ctrl+Shift+V**.
+8. Quit Clipsy. Open `config.toml` again, change `paused = true` back to `paused = false`, use
+   **Save as** with **All Files** as in step 4, and start Clipsy.
 
 Expected: after the restart with `paused = true`, the tray menu shows **Resume capture** (not
-"Pause capture"). The text `paused test` is **not** in the list.
+"Pause capture"). The text `paused test` is **not** in the list. The **Settings** window
+shows **Pause recording** ticked under **Privacy**.
 
 ### 18. Text copied from Word or Excel has no garbage characters at the end
 
 Steps:
 1. Open **Microsoft Word** (or WordPad). Type `Clipsy NUL test`, select it, press **Ctrl+C**.
 2. In Excel, type `Clipsy cell test` in one cell, select it, press **Ctrl+C**.
-3. Press **Ctrl+Shift+V**. Select the `Clipsy NUL test` item and press **Enter** into Notepad.
-4. In Notepad, press **Ctrl+End**.
+3. Open **Notepad** and click in it, so it has focus.
+4. Press **Ctrl+Shift+V**. Select the `Clipsy NUL test` item and press **Enter**.
+5. In Notepad, press **Ctrl+End**.
 
 Expected: the pasted text ends right after the word `test`. There are no boxes, no odd
 symbols and no spaces-and-symbols after the last letter. The cursor after **Ctrl+End**
@@ -345,8 +401,8 @@ Send us the following in one message:
 1. Your **Windows version** (from `winver`, for example "Windows 11, version 24H2").
 2. For each check from **1 to 19**: **pass** or **fail**. For a fail, say what you saw.
 3. For any error message: a screenshot, or copy the text of the message.
-4. If you ran Clipsy with logs on (`$env:RUST_LOG = "debug"`): copy the lines from the
-   PowerShell window that mention `warn`, `error` or `paste`. Tell us if the log lines
-   were shown in the PowerShell window, or where you saw them.
+4. If you ran Clipsy with logs on (`$env:CLIPSY_LOG = "debug"`): copy the lines from the
+   console window that mention `warn`, `error` or `paste`. There is no log file; the logs are
+   only in that console window.
 5. If something crashed or froze: say which check you were doing, and whether Clipsy
    closed or the tray icon disappeared.

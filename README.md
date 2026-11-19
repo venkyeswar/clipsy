@@ -74,15 +74,19 @@ makes no network connections, needs no account, and sends no telemetry.
 
 ## Windows (experimental)
 
-Clipsy also has a Windows version. It is new and still being tested, so expect rough edges.
+Clipsy also has a Windows version. It is **new and not yet tested on Windows**:
+the code compiles, but nobody has run it on a real Windows PC yet. Expect bugs.
+The checklist in [docs/windows-acceptance.md](docs/windows-acceptance.md) is how we find them.
 
-**What works:** copying text, images and files into history; a popup opened with
+**What is meant to work:** copying text, images and files into history; a popup opened with
 **Ctrl+Shift+V**; pick an item and press Enter to paste it; pins and search; history
 kept after restart; a tray icon with a menu; autostart at login; one running copy
 at a time; no network connections.
 
-**Where data lives:** history in `%LOCALAPPDATA%\clipsy`, settings in
-`%APPDATA%\clipsy\config.toml`.
+**Where data lives:**
+
+- Settings file: `%APPDATA%\clipsy\config\config.toml`. Clipsy creates it the first time it starts.
+- History database: `%LOCALAPPDATA%\clipsy\data`.
 
 ### Build on Windows
 
@@ -92,12 +96,16 @@ You need Windows 10 or 11 (64-bit) and:
    (this installs the MSVC toolchain).
 2. Install **Build Tools for Visual Studio** from <https://visualstudio.microsoft.com/visual-cpp-build-tools/>.
    In the installer, tick the **Desktop development with C++** workload, then install.
-3. Open **PowerShell** (Start menu, type `powershell`). Go to the Clipsy project folder
-   (the folder that contains this README), for example:
+3. Get the project. Install [Git for Windows](https://git-scm.com/download/win) if you
+   do not have it, or download the project as a ZIP from GitHub. Then open **PowerShell**
+   (Start menu, type `powershell`) and run:
 
    ```powershell
-   cd C:\Users\<your-name>\clipsy
+   git clone https://github.com/venkyeswar/clipsy.git
+   cd clipsy
    ```
+
+   If you downloaded a ZIP instead, unzip it and `cd` into the folder that contains this README.
 
 4. Build the app:
 
@@ -116,13 +124,33 @@ Start Clipsy from the same PowerShell window:
 .\target\release\clipsy-windows.exe
 ```
 
-A Clipsy icon appears in the system tray (the `^` arrow near the clock may hide it;
-drag it out to keep it visible). Copy something, then press **Ctrl+Shift+V** to open
-the popup. Press **Enter** to paste the selected item.
+A black console window stays open while Clipsy runs. Leave it open. Clipsy also shows
+an icon in the system tray (the `^` arrow near the clock may hide it; drag it out to keep
+it visible). Copy something, then press **Ctrl+Shift+V** to open the popup. Press **Enter**
+to paste the selected item.
 
 The default hotkey is **Ctrl+Shift+V** because Windows reserves Win+V for its own
-clipboard. To change it, edit `%APPDATA%\clipsy\config.toml` (the `toggle_popup` line
-under `[shortcuts]`) and restart Clipsy.
+clipboard. You can change it in the Settings window (tray icon > **Settings**, field
+**Show popup**), or by editing the `toggle_popup` line under `[shortcuts]` in
+`%APPDATA%\clipsy\config\config.toml`, then restarting Clipsy.
+
+**Settings file:** after the first start, the settings file is at
+`%APPDATA%\clipsy\config\config.toml`. To open it in Notepad, press **Windows+R**, type
+`%APPDATA%\clipsy\config`, press **Enter**, then double-click `config.toml`. When you save
+a change in Notepad using **File > Save as**, set **Save as type** to **All Files**, otherwise
+Windows saves `config.toml.txt`. To check the name, run this in PowerShell; it should list `config.toml`:
+
+```powershell
+dir $env:APPDATA\clipsy\config
+```
+
+**Logs:** Clipsy prints log messages only to the console window (there is no log file).
+To see more detail, set the log level in the same PowerShell window before starting:
+
+```powershell
+$env:CLIPSY_LOG = "debug"
+.\target\release\clipsy-windows.exe
+```
 
 Clipsy also understands these commands. Run them from a second PowerShell window while
 Clipsy is running:
@@ -147,8 +175,9 @@ click **More info**, then **Run anyway**.
 - Clipsy cannot paste into a window that runs as administrator unless Clipsy also runs
   as administrator. **Do not run Clipsy as administrator.** Paste into normal windows only.
 - Win+V is reserved by Windows and cannot be used for Clipsy.
-- Not yet tested on every Windows setup. The checks in `docs/windows-acceptance.md`
-  list what has been verified.
+- The console window stays open, including when Clipsy starts at login. Closing it stops Clipsy.
+- Not yet tested on Windows. The checks in `docs/windows-acceptance.md` are what we
+  run to verify it.
 
 ### Developers: check the Windows code from Ubuntu
 

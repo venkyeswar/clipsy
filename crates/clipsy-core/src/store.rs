@@ -717,9 +717,16 @@ fn describe(
 
 /// Restricts a file to its owner (mode 0600). Failure is not fatal: the data
 /// folder is already owner-only (0700).
+#[cfg(unix)]
 fn make_private(path: &Path) {
     use std::os::unix::fs::PermissionsExt;
     let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+}
+
+/// Windows has no unix mode bits; the user profile is already private.
+#[cfg(not(unix))]
+fn make_private(path: &Path) {
+    let _ = path;
 }
 
 /// Decode the image, write a 256 px PNG thumbnail and return the original dimensions.

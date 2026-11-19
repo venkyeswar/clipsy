@@ -4,8 +4,6 @@
 //! Prints every clipboard change (mimes + sizes) and, if ACCEL is given (e.g. "<Ctrl><Alt>j"),
 //! registers it as TogglePopup and prints presses.
 
-use clipsy_backends::HotkeyAction;
-
 #[cfg(not(target_os = "linux"))]
 fn main() {
     eprintln!("the watch example only runs on Linux");
@@ -13,6 +11,7 @@ fn main() {
 
 #[cfg(target_os = "linux")]
 fn main() -> anyhow::Result<()> {
+    use clipsy_backends::HotkeyAction;
     use std::sync::mpsc::channel;
     use std::thread;
     use std::time::Duration;

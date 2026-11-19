@@ -1,8 +1,24 @@
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SiteHeader } from "./site-header";
 import { ThemeProvider } from "./theme-provider";
+import { useReleases } from "@/hooks/use-releases";
+import type { Release } from "@/lib/releases";
+import { renderWithPlatform } from "@/test/render-with-platform";
+
+vi.mock("@/hooks/use-releases", () => ({ useReleases: vi.fn() }));
+const mockedUseReleases = vi.mocked(useReleases);
+
+const release: Release = {
+  version: "0.3.1",
+  tag: "v0.3.1",
+  date: "2026-11-18T12:00:00Z",
+  prerelease: false,
+  notesUrl: "https://example.test/notes",
+  deb: { name: "clipsy_0.3.1_amd64.deb", url: "https://example.test/clipsy.deb", size: 1 },
+  windowsInstaller: { name: "clipsy-0.3.1-setup.exe", url: "https://example.test/setup.exe", size: 1 },
+};
 
 type Callback = (entries: Partial<IntersectionObserverEntry>[]) => void;
 
@@ -20,22 +36,44 @@ class FakeIntersectionObserver {
   }
 }
 
-function renderHeader() {
-  return render(
+function renderHeader(platform: "linux" | "windows" = "linux") {
+  return renderWithPlatform(
     <ThemeProvider>
       <SiteHeader />
     </ThemeProvider>,
+    platform,
   );
 }
 
 beforeEach(() => {
   lastCallback = undefined;
+  window.localStorage.clear();
+  mockedUseReleases.mockReturnValue({ releases: [release], status: "live" });
   vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
 });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+
+it("download_button_points_at_the_deb_on_linux", () => {
+  renderHeader("linux");
+  expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute("href", "https://example.test/clipsy.deb");
+});
+
+it("download_button_points_at_the_windows_installer_on_windows", () => {
+  renderHeader("windows");
+  expect(screen.getByRole("link", { name: "Download for Windows" })).toHaveAttribute(
+    "href",
+    "https://example.test/setup.exe",
+  );
+});
+
+it("download_button_goes_to_install_when_windows_is_coming_soon", () => {
+  mockedUseReleases.mockReturnValue({ releases: [{ ...release, windowsInstaller: undefined }], status: "live" });
+  renderHeader("windows");
+  expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute("href", "#install");
 });
 
 it("marks_active_section_link", () => {

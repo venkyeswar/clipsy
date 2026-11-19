@@ -19,6 +19,9 @@ import {
 } from "@/components/ui/sheet";
 import { config } from "@/config";
 import { useTheme, type Theme } from "@/components/theme-provider";
+import { useReleases } from "@/hooks/use-releases";
+import { useSelectedPlatform } from "@/lib/platform-context";
+import { latestStable, latestWithWindows } from "@/lib/releases";
 
 const sectionLinks = [
   { href: "#install", label: "Install" },
@@ -115,8 +118,24 @@ function useActiveSection(ids: string[]): string {
   return active;
 }
 
+/**
+ * Where the header Download button goes for the visitor's platform: the Windows installer
+ * when there is one, otherwise the Install section; the .deb on Linux, otherwise Downloads.
+ */
+function useHeaderDownload(): { href: string; label: string } {
+  const { releases } = useReleases();
+  const { platform } = useSelectedPlatform();
+  if (platform === "windows") {
+    const url = latestWithWindows(releases)?.windowsInstaller?.url;
+    return url ? { href: url, label: "Download for Windows" } : { href: "#install", label: "Download" };
+  }
+  const deb = latestStable(releases)?.deb?.url;
+  return deb ? { href: deb, label: "Download" } : { href: "#downloads", label: "Download" };
+}
+
 export function SiteHeader() {
   const active = useActiveSection(trackedSectionIds);
+  const download = useHeaderDownload();
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
@@ -162,10 +181,10 @@ export function SiteHeader() {
           <ThemeToggle />
           <Button
             className="ml-1 hidden h-11 px-3.5 hover:bg-primary-hover md:inline-flex"
-            render={<a href="#downloads" />}
+            render={<a href={download.href} />}
           >
             <Download aria-hidden="true" />
-            Download
+            {download.label}
           </Button>
 
           <Sheet>

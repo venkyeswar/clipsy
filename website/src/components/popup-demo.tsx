@@ -68,7 +68,14 @@ function prefersReducedMotion(): boolean {
  * A working mini version of the Clipsy popup. Autoplays once on load unless the
  * user has reduced motion; any user input cancels the autoplay immediately.
  */
-export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
+export function PopupDemo({
+  autoplay = true,
+  shortcut = config.shortcut,
+}: {
+  autoplay?: boolean;
+  /** Key labels for the opening shortcut chip (the Windows default differs). */
+  shortcut?: string[];
+}) {
   const checkboxId = useId();
   const [startPlaying] = useState(() => autoplay && !prefersReducedMotion());
   const [items, setItems] = useState<DemoItem[]>(() => (startPlaying ? OPENING_ITEMS : FINAL_ITEMS));
@@ -231,7 +238,7 @@ export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
           aria-label="Default shortcut"
           className="absolute top-0 left-3 z-20 flex items-center gap-1 rounded-xl border border-border bg-card/95 px-2 py-1.5 text-xs text-muted-foreground shadow-float backdrop-blur sm:-left-6"
         >
-          {config.shortcut.map((key, index) => (
+          {shortcut.map((key, index) => (
             <span key={key} className="inline-flex items-center gap-1">
               {index > 0 && <span aria-hidden="true">+</span>}
               <Keycap pressed={pressedKeys > index}>{key}</Keycap>

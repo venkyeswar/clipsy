@@ -40,6 +40,7 @@ MinVersion=10.0
 LicenseFile=..\..\LICENSE
 UninstallDisplayName=Clipsy
 UninstallDisplayIcon={app}\clipsy.exe
+SetupIconFile=..\..\crates\clipsy-windows\assets\clipsy.ico
 OutputBaseFilename=clipsy-{#AppVersion}-setup
 OutputDir=..\..\dist
 Compression=lzma2/max

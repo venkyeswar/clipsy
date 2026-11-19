@@ -70,6 +70,24 @@ export component SettingsDialog inherits Window {
         padding: 16px;
         spacing: 12px;
 
+        // Header: the Clipsy logo and window name.
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            Image {
+                source: @image-url("../assets/clipsy-64.png");
+                width: 20px;
+                height: 20px;
+                image-fit: contain;
+            }
+            Text {
+                text: "Clipsy settings";
+                font-size: 14px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+        }
+
         ScrollView {
             vertical-stretch: 1;
 

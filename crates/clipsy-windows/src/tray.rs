@@ -11,13 +11,8 @@ use anyhow::Context;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
+use crate::logo::{self, TRAY_ICON_SIZE};
 use crate::single_instance::Verb;
-
-const ICON_SIZE: u32 = 32;
-/// Corner radius of the generated icon, in pixels.
-const ICON_RADIUS: f32 = 7.0;
-/// Accent colour of the generated icon (RGB).
-const ICON_COLOR: [u8; 3] = [53, 132, 228];
 
 const ID_OPEN: &str = "clipsy-open";
 const ID_PAUSE: &str = "clipsy-pause";
@@ -56,7 +51,8 @@ impl Tray {
             .context("could not add the separator")?;
         menu.append(&quit).context("could not add the Quit menu item")?;
 
-        let icon = Icon::from_rgba(icon_rgba(), ICON_SIZE, ICON_SIZE)
+        let size = TRAY_ICON_SIZE;
+        let icon = Icon::from_rgba(logo::tray_icon_rgba()?, size, size)
             .map_err(|e| anyhow::anyhow!("invalid tray icon image: {e}"))?;
         let tray_icon = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
@@ -142,24 +138,4 @@ impl Tray {
             tracing::warn!("could not set the tray tooltip: {e}");
         }
     }
-}
-
-/// Builds the RGBA pixels of a solid rounded square in the accent colour.
-/// Pixels outside the rounded corners are fully transparent.
-fn icon_rgba() -> Vec<u8> {
-    let size = ICON_SIZE as f32;
-    let mut rgba = Vec::with_capacity((ICON_SIZE * ICON_SIZE * 4) as usize);
-    for y in 0..ICON_SIZE {
-        for x in 0..ICON_SIZE {
-            let px = x as f32 + 0.5;
-            let py = y as f32 + 0.5;
-            // Distance from the pixel to the inner rectangle (inset by the radius).
-            let nearest_x = px.clamp(ICON_RADIUS, size - ICON_RADIUS);
-            let nearest_y = py.clamp(ICON_RADIUS, size - ICON_RADIUS);
-            let inside = (px - nearest_x).hypot(py - nearest_y) <= ICON_RADIUS;
-            let alpha = if inside { 255 } else { 0 };
-            rgba.extend_from_slice(&[ICON_COLOR[0], ICON_COLOR[1], ICON_COLOR[2], alpha]);
-        }
-    }
-    rgba
 }

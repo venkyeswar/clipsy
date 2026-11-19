@@ -126,6 +126,25 @@ export component ClipPopup inherits Window {
             }
         }
 
+        // Header: the Clipsy logo and name, above the filter tabs.
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            Image {
+                source: @image-url("../assets/clipsy-64.png");
+                width: 20px;
+                height: 20px;
+                image-fit: contain;
+            }
+            Text {
+                text: "Clipsy";
+                color: root.fg;
+                font-size: 13px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+        }
+
         HorizontalLayout {
             spacing: 4px;
             FilterTab {

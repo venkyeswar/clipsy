@@ -54,14 +54,14 @@ fn show_count(dialog: &adw::MessageDialog, label: &str, count: i64) {
 ///
 /// Only the "cancel" response and (when there is something to clear) "clear" are
 /// offered. `on_done` runs after a clear, whether or not the database call worked.
-// Used by popup (task 3) and settings (task 4).
-#[allow(dead_code)]
+/// Returns the dialog so the caller can watch when it closes (for example, to keep
+/// the popup open while it is up). Connecting to it is optional.
 pub fn confirm(
     parent: &impl IsA<gtk::Window>,
     state: Rc<State>,
     filter: Filter,
     on_done: impl Fn() + 'static,
-) {
+) -> adw::MessageDialog {
     let label = label_for(filter);
     let heading = format!("Clear {label}?");
     let dialog = adw::MessageDialog::new(Some(parent), Some(&heading), None);
@@ -102,6 +102,7 @@ pub fn confirm(
     });
 
     dialog.present();
+    dialog
 }
 
 /// Whether pinned items should be removed too. Always true on the Pinned tab,

@@ -14,7 +14,7 @@ use clipsy_core::{ClipItem, Filter, Format, Kind};
 use gtk::{gdk, gio, glib};
 
 use crate::app::{pad, State};
-use crate::placement;
+use crate::{clear_dialog, placement};
 
 /// How many rows the list shows at most. Search still looks through everything.
 const HISTORY_LIMIT: usize = 500;
@@ -59,6 +59,8 @@ pub struct Popup {
     window: gtk::Window,
     search: gtk::SearchEntry,
     chips: Vec<gtk::ToggleButton>,
+    /// Trash button that clears the current tab. Enabled only when there is something to clear.
+    clear_btn: gtk::Button,
     banner: adw::Banner,
     stack: gtk::Stack,
     empty: adw::StatusPage,
@@ -69,6 +71,9 @@ pub struct Popup {
     /// True once the window has had focus since it was shown. Used so that a
     /// window which never got focus is not hidden by the focus-loss handler.
     seen_active: Cell<bool>,
+    /// True while the clear confirm dialog is open. The popup must not hide then:
+    /// the dialog takes focus, which would otherwise count as "clicked away".
+    dialog_open: Cell<bool>,
     search_timer: RefCell<Option<glib::SourceId>>,
     /// The Space-bar preview, if it is open.
     preview: RefCell<Option<gtk::Popover>>,
@@ -146,6 +151,22 @@ impl Popup {
                 chips.push(chip);
             }
             chips[0].set_active(true);
+
+            // Trash button at the right end of the row: clears the current tab.
+            // Its sensitivity is set in `reload`.
+            let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+            spacer.set_hexpand(true);
+            let clear_btn = gtk::Button::from_icon_name("user-trash-symbolic");
+            clear_btn.add_css_class("flat");
+            clear_btn.set_tooltip_text(Some("Clear this tab"));
+            let w = me.clone();
+            clear_btn.connect_clicked(move |_| {
+                if let Some(p) = w.upgrade() {
+                    p.clear_current_tab();
+                }
+            });
+            chips_box.append(&spacer);
+            chips_box.append(&clear_btn);
 
             // --- Paused banner --------------------------------------------------
             let banner = adw::Banner::new("Clipboard recording is paused");
@@ -269,7 +290,10 @@ impl Popup {
                         p.seen_active.set(true);
                         // The drag is over once the window has focus again.
                         resizing_flag.set(false);
-                    } else if p.seen_active.get() && !resizing_flag.get() {
+                    } else if p.seen_active.get()
+                        && !resizing_flag.get()
+                        && !p.dialog_open.get()
+                    {
                         p.hide();
                     }
                 }
@@ -281,6 +305,7 @@ impl Popup {
                 window,
                 search,
                 chips,
+                clear_btn,
                 banner,
                 stack,
                 empty,
@@ -289,6 +314,7 @@ impl Popup {
                 selection,
                 filter_index: Cell::new(0),
                 seen_active: Cell::new(false),
+                dialog_open: Cell::new(false),
                 search_timer: RefCell::new(None),
                 preview: RefCell::new(None),
             }
@@ -367,6 +393,29 @@ impl Popup {
         self.reload(Focus::Top);
     }
 
+    /// Asks to clear the current tab. The popup stays open while the dialog is up,
+    /// and the list is reloaded once the dialog has done its work.
+    fn clear_current_tab(&self) {
+        let filter = filter_for(self.filter_index.get());
+        self.dialog_open.set(true);
+
+        let w = self.me.clone();
+        let dialog = clear_dialog::confirm(&self.window, self.state.clone(), filter, move || {
+            if let Some(p) = w.upgrade() {
+                p.reload(Focus::Top);
+            }
+        });
+
+        // Runs after the response handlers above (both for "clear" and "cancel"),
+        // so the popup can hide on focus loss again once the dialog is gone.
+        let w = self.me.clone();
+        dialog.connect_response(None, move |_, _| {
+            if let Some(p) = w.upgrade() {
+                p.dialog_open.set(false);
+            }
+        });
+    }
+
     /// Waits a moment after the last key press, then reloads the list.
     fn schedule_reload(&self) {
         if let Some(id) = self.search_timer.borrow_mut().take() {
@@ -401,6 +450,16 @@ impl Popup {
                 }
             }
         };
+
+        // The trash button only works when this tab has something to clear.
+        let clearable = match self.state.store.borrow().count(filter, true) {
+            Ok(n) => n,
+            Err(err) => {
+                tracing::warn!("could not count the history: {err:#}");
+                0
+            }
+        };
+        self.clear_btn.set_sensitive(clearable > 0);
 
         let objects: Vec<glib::BoxedAnyObject> =
             items.into_iter().map(glib::BoxedAnyObject::new).collect();

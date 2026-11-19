@@ -200,12 +200,12 @@ Config loaded at start, written by Settings window, invalid values fall back to 
 Use libadwaita widgets and named colors only (`@accent_color`, `@window_bg_color`, `@card_bg_color`, etc.) so light and dark both look right automatically. Theme setting maps to `adw::StyleManager::set_color_scheme` (`Default` / `ForceLight` / `ForceDark`). Minimal custom CSS. Rounded corners, 12 px spacing grid. All strings via `gettext` macros (i18n-ready).
 
 ### 8.1 Popup (main window)
-- Size ~420 × 540, undecorated, appears at cursor (clamped to monitor) or center; closes on Esc or focus loss.
+- Size ~440 × 560 (minimum width 380), undecorated, appears at cursor (clamped to monitor) or center; closes on Esc or focus loss.
 - Layout:
   ```
   ┌──────────────────────────────────────────┐
   │ 🔍 Search clipboard…            [⚙]      │  search entry focused on open
-  │ [All] [Text] [Images] [Files] [★ Pinned]  │  filter chips (toggle buttons)
+  │ [All] [Text] [Images] [Files] [★ Pinned] [🗑]│  filter chips (toggle buttons); 🗑 = clear current tab
   ├──────────────────────────────────────────┤
   │ ★  "Meeting notes for Thursday…"          │  pinned first
   │    Text · Firefox · 2 min ago        [⋯]  │
@@ -220,6 +220,7 @@ Use libadwaita widgets and named colors only (`@accent_color`, `@window_bg_color
   ```
 - List: `gtk::ListView` + `gio::ListStore` with lazy thumbnail loading (fast with 500+ items).
 - Row `[⋯]` menu: Paste, Paste as plain text, Pin/Unpin, Copy only (no paste), Delete.
+- Clear button (🗑, right end of the chip row): clears only the current tab's items after a confirm dialog with an "Also remove pinned items" checkbox (unchecked by default). Hidden on the ★ Pinned tab.
 - Image rows: hover/Space shows a larger preview popover.
 - Empty state: `adw::StatusPage` "Nothing copied yet — copy something and it will appear here". Paused state: banner "Recording paused [Resume]".
 - Keyboard: ↑/↓ move, Enter paste, Shift+Enter plain-text paste, Ctrl+P pin, Delete remove, Ctrl+1…9 quick paste, Tab cycles filter chips, typing goes to search, Esc closes.
@@ -229,12 +230,12 @@ Use libadwaita widgets and named colors only (`@accent_color`, `@window_bg_color
 - **General:** launch at login, paste after selecting, history size (spin), max total storage, max item size, save images / files / rich text, watch mouse selection.
 - **Appearance:** theme (System / Light / Dark — live preview), popup position, compact rows, show source app.
 - **Shortcuts:** rows for Open clipboard, Clear history, Pause recording. Clicking a row opens a **shortcut recorder dialog** ("Press new shortcut… Esc to cancel, Backspace to clear"), detects conflicts (grab failure → inline error toast "Shortcut already used by another app").
-- **Privacy:** pause recording, skip passwords, ignored apps list (add/remove, with "pick from running windows" helper), clear history on exit, **Clear all history** (destructive, confirm dialog).
+- **Privacy:** pause recording, skip passwords, ignored apps list (add/remove, with "pick from running windows" helper), clear history on exit, **Clear all history** (destructive, same confirm dialog with the "Also remove pinned items" checkbox).
 - **About:** `adw::AboutWindow` (version, license, links).
 - Opened from popup gear button, `clipsy settings`, or app launcher entry.
 
 ### 8.3 First-run welcome
-`adw::Window` with a short carousel: (1) what Clipsy does, (2) your shortcut — **GNOME binds Super+V to the notification list by default**: offer button "Use Super+V for Clipsy" which rebinds GNOME's `org.gnome.shell.keybindings toggle-message-tray` to only `<Super>m` (via `gio::Settings`), or let user pick another shortcut, (3) launch at login toggle. Done.
+`adw::Window` (480 × 600) with a 4-page carousel: (1) welcome — what Clipsy does, (2) how to open it — your shortcut, and **GNOME binds Super+V to the notification list by default**: offer button "Use Super+V for Clipsy" which rebinds GNOME's `org.gnome.shell.keybindings toggle-message-tray` to only `<Super>m` (via `gio::Settings`), or let user pick another shortcut, (3) private by default — history stays on this machine, sensitive items skipped, (4) make it yours — launch at login toggle and paste after selecting. Done.
 
 ### 8.4 Notifications / tray
 No tray icon on stock GNOME. Use `adw::Toast` inside windows and `gio::Notification` sparingly (e.g. "Paused"). Panel indicator comes with the GNOME extension (Phase 4).

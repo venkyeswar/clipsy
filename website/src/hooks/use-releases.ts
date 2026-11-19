@@ -99,18 +99,65 @@ export async function loadReleases(
   return fromSnapshot();
 }
 
+type LoadResult = { releases: Release[]; status: "live" | "snapshot" | "empty" };
+
+/** After a failed or rate-limited request, do not ask GitHub again for this long. */
+const NEGATIVE_TTL_MS = 2 * 60 * 1000;
+
+// Module-level state shared by every mounted component, so a cold page load makes one request.
+let inFlight: Promise<LoadResult> | null = null;
+let failedAt: number | null = null;
+
+/** Clears the shared request state. Tests use it to start from a clean slate. */
+export function resetReleasesRequests(): void {
+  inFlight = null;
+  failedAt = null;
+}
+
+/**
+ * One release request for the whole page: concurrent callers share the in-flight promise,
+ * and a failure is remembered briefly so later mounts fall back to the snapshot without retrying.
+ */
+export function requestReleases(): Promise<LoadResult> {
+  if (inFlight) return inFlight;
+
+  const recentlyFailed = failedAt !== null && Date.now() - failedAt < NEGATIVE_TTL_MS;
+  let requestFailed = false;
+  // A recent failure still reads the fresh sessionStorage cache, but never calls the network.
+  const fetchImpl: typeof fetch = recentlyFailed
+    ? () => Promise.reject(new Error("GitHub request failed recently"))
+    : async (input, init) => {
+        try {
+          const response = await fetch(input, init);
+          if (!response.ok) requestFailed = true;
+          return response;
+        } catch (error) {
+          requestFailed = true;
+          throw error;
+        }
+      };
+
+  const request = loadReleases(fetchImpl, safeSessionStorage, Date.now, snapshot).then((result) => {
+    // Only a real request updates the failure time; blocked requests leave the window alone.
+    if (!recentlyFailed) failedAt = requestFailed ? Date.now() : null;
+    return result;
+  });
+  inFlight = request.finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
 export function useReleases(): ReleasesState {
   const [state, setState] = useState<ReleasesState>({ releases: [], status: "loading" });
 
   useEffect(() => {
     let active = true;
-    const controller = new AbortController();
-    loadReleases(fetch, safeSessionStorage, Date.now, snapshot, controller.signal).then((result) => {
+    requestReleases().then((result) => {
       if (active) setState(result);
     });
     return () => {
       active = false;
-      controller.abort();
     };
   }, []);
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { loadReleases, useReleases } from "./use-releases";
+import { loadReleases, resetReleasesRequests, useReleases } from "./use-releases";
 
 // The hook test relies on an empty bundled snapshot.
 vi.mock("../data/releases.snapshot.json", () => ({ default: [] }));
@@ -46,6 +46,7 @@ afterEach(() => {
 
 beforeEach(() => {
   window.sessionStorage.clear();
+  resetReleasesRequests();
 });
 
 describe("loadReleases", () => {
@@ -151,5 +152,39 @@ describe("useReleases", () => {
     expect(result.current).toEqual({ releases: [], status: "loading" });
     await waitFor(() => expect(result.current.status).not.toBe("loading"));
     expect(result.current).toEqual({ releases: [], status: "empty" });
+  });
+});
+
+describe("shared release request", () => {
+  it("two_mounts_make_exactly_one_fetch", async () => {
+    const fetchMock = fakeFetch(200, [rawRelease("v0.3.0")]);
+    vi.stubGlobal("fetch", fetchMock);
+    const first = renderHook(() => useReleases());
+    const second = renderHook(() => useReleases());
+    await waitFor(() => expect(first.result.current.status).toBe("live"));
+    await waitFor(() => expect(second.result.current.status).toBe("live"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("successful_result_is_cached_for_later_mounts", async () => {
+    const fetchMock = fakeFetch(200, [rawRelease("v0.3.0")]);
+    vi.stubGlobal("fetch", fetchMock);
+    const first = renderHook(() => useReleases());
+    await waitFor(() => expect(first.result.current.status).toBe("live"));
+    first.unmount();
+    const later = renderHook(() => useReleases());
+    await waitFor(() => expect(later.result.current.status).toBe("live"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("failed_fetch_is_not_retried_within_the_negative_window", async () => {
+    const fetchMock = fakeFetch(403, { message: "rate limited" });
+    vi.stubGlobal("fetch", fetchMock);
+    const first = renderHook(() => useReleases());
+    await waitFor(() => expect(first.result.current.status).not.toBe("loading"));
+    first.unmount();
+    const second = renderHook(() => useReleases());
+    await waitFor(() => expect(second.result.current.status).not.toBe("loading"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

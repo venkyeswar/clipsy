@@ -79,29 +79,196 @@ fn key_label(key: &str) -> String {
     }
 }
 
-/// Opens the welcome window.
+/// Opens the welcome window: a carousel of four short pages with Back and Next.
 pub fn show(app: &adw::Application, state: &Rc<State>) {
     install_css();
 
     let window = adw::Window::new();
     window.set_application(Some(app));
     window.set_title(Some("Welcome to Clipsy"));
-    window.set_default_size(400, -1);
-    // Resizable, with a sensible minimum so the content never gets cramped.
+    window.set_default_size(480, 600);
     window.set_resizable(true);
-    window.set_size_request(340, 360);
+    window.set_size_request(420, 520);
 
+    let carousel = adw::Carousel::new();
+    carousel.set_vexpand(true);
+    carousel.append(&intro_page());
+    carousel.append(&shortcut_page(&window, state));
+    carousel.append(&privacy_page());
+    carousel.append(&settings_page(state));
+
+    let dots = adw::CarouselIndicatorDots::new();
+    dots.set_carousel(Some(&carousel));
+    dots.set_halign(gtk::Align::Center);
+
+    let back = gtk::Button::with_label("Back");
+    {
+        let c = carousel.downgrade();
+        back.connect_clicked(move |_| {
+            let Some(carousel) = c.upgrade() else {
+                return;
+            };
+            let page = current_page(&carousel);
+            if page > 0 {
+                carousel.scroll_to(&carousel.nth_page(page - 1), true);
+            }
+        });
+    }
+
+    let next = gtk::Button::with_label("Next");
+    {
+        let (c, w) = (carousel.downgrade(), window.downgrade());
+        next.connect_clicked(move |_| {
+            let (Some(carousel), Some(window)) = (c.upgrade(), w.upgrade()) else {
+                return;
+            };
+            let page = current_page(&carousel);
+            if is_last_page(page, carousel.n_pages()) {
+                finish_welcome(&window);
+            } else {
+                carousel.scroll_to(&carousel.nth_page(page + 1), true);
+            }
+        });
+    }
+
+    {
+        let (b, n) = (back.clone(), next.clone());
+        carousel.connect_page_changed(move |c, page| sync_nav(page, c.n_pages(), &b, &n));
+    }
+    sync_nav(0, carousel.n_pages(), &back, &next);
+
+    let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    spacer.set_hexpand(true);
+    let nav = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    nav.set_margin_start(24);
+    nav.set_margin_end(24);
+    nav.append(&back);
+    nav.append(&spacer);
+    nav.append(&next);
+
+    let bottom = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    bottom.set_margin_top(12);
+    bottom.set_margin_bottom(16);
+    bottom.append(&dots);
+    bottom.append(&nav);
+
+    // Closing the window with the title bar also counts as "seen".
+    window.connect_close_request(move |_| {
+        mark_done();
+        glib::Propagation::Proceed
+    });
+
+    // A slim, flat title bar: gives the window a close button and a place to
+    // drag it from (Wayland windows have no frame of their own).
+    let header = adw::HeaderBar::new();
+    header.set_show_title(false);
+    let toolbar = adw::ToolbarView::new();
+    toolbar.add_top_bar(&header);
+    toolbar.set_content(Some(&carousel));
+    toolbar.add_bottom_bar(&bottom);
+    window.set_content(Some(&toolbar));
+    window.present();
+}
+
+/// Index of the page that is showing now.
+fn current_page(carousel: &adw::Carousel) -> u32 {
+    carousel.position().round() as u32
+}
+
+/// Sets the Back and Next buttons for a page. The last page turns Next into the pill.
+fn sync_nav(page: u32, n_pages: u32, back: &gtk::Button, next: &gtk::Button) {
+    back.set_visible(back_visible(page));
+    next.set_label(next_label(page, n_pages));
+    if is_last_page(page, n_pages) {
+        next.add_css_class("pill");
+        next.add_css_class("suggested-action");
+    } else {
+        next.remove_css_class("pill");
+        next.remove_css_class("suggested-action");
+    }
+}
+
+fn is_last_page(page: u32, n_pages: u32) -> bool {
+    page + 1 >= n_pages
+}
+
+fn back_visible(page: u32) -> bool {
+    page > 0
+}
+
+fn next_label(page: u32, n_pages: u32) -> &'static str {
+    if is_last_page(page, n_pages) {
+        "Start using Clipsy"
+    } else {
+        "Next"
+    }
+}
+
+/// Empty column for a page. Two of these around the content center it vertically.
+fn spacer() -> gtk::Box {
+    let spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    spacer.set_vexpand(true);
+    spacer
+}
+
+/// Box for a page's content, with the page margins and spacing.
+fn content_box() -> gtk::Box {
+    let content = gtk::Box::new(gtk::Orientation::Vertical, 16);
+    content.set_margin_start(24);
+    content.set_margin_end(24);
+    content
+}
+
+/// Wraps a page's content so it sits in the middle and scrolls when the window is short.
+fn page(content: &gtk::Box) -> gtk::ScrolledWindow {
+    let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    column.set_vexpand(true);
+    column.append(&spacer());
+    column.append(content);
+    column.append(&spacer());
+
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    scroller.set_vexpand(true);
+    scroller.set_child(Some(&column));
+    scroller
+}
+
+fn heading(text: &str) -> gtk::Label {
+    let label = gtk::Label::new(Some(text));
+    label.add_css_class("title-2");
+    label.set_wrap(true);
+    label.set_justify(gtk::Justification::Center);
+    label
+}
+
+fn body_label(text: &str) -> gtk::Label {
+    let label = gtk::Label::new(Some(text));
+    label.add_css_class("dim-label");
+    label.set_wrap(true);
+    label.set_justify(gtk::Justification::Center);
+    label
+}
+
+/// Page 1: the app icon, the name and the tagline.
+fn intro_page() -> gtk::ScrolledWindow {
     let icon = gtk::Image::from_icon_name(APP_ID);
-    icon.set_pixel_size(64);
+    icon.set_pixel_size(96);
 
-    let title = gtk::Label::new(Some("Clipsy"));
+    let title = gtk::Label::new(Some("Welcome to Clipsy"));
     title.add_css_class("title-1");
+    title.set_wrap(true);
+    title.set_justify(gtk::Justification::Center);
 
-    let tagline = gtk::Label::new(Some("Everything you copy, one shortcut away."));
-    tagline.add_css_class("dim-label");
-    tagline.set_wrap(true);
-    tagline.set_justify(gtk::Justification::Center);
+    let content = content_box();
+    content.append(&icon);
+    content.append(&title);
+    content.append(&body_label("Everything you copy, one shortcut away."));
+    page(&content)
+}
 
+/// Page 2: the popup shortcut, with Change, and the GNOME setup box when it is needed.
+fn shortcut_page(window: &adw::Window, state: &Rc<State>) -> gtk::ScrolledWindow {
     let keycaps = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     fill_keycaps(&keycaps, &state.config.borrow().shortcuts.toggle_popup);
 
@@ -113,8 +280,13 @@ pub fn show(app: &adw::Application, state: &Rc<State>) {
 
     let change = gtk::Button::with_label("Change");
     {
-        let (w, s, k, st) = (window.clone(), state.clone(), keycaps.clone(), status.clone());
-        change.connect_clicked(move |_| record_shortcut(&w, &s, &k, &st));
+        let w = window.downgrade();
+        let (s, k, st) = (state.clone(), keycaps.clone(), status.clone());
+        change.connect_clicked(move |_| {
+            if let Some(w) = w.upgrade() {
+                record_shortcut(&w, &s, &k, &st);
+            }
+        });
     }
 
     let shortcut_row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
@@ -122,6 +294,33 @@ pub fn show(app: &adw::Application, state: &Rc<State>) {
     shortcut_row.append(&keycaps);
     shortcut_row.append(&change);
 
+    let content = content_box();
+    content.append(&heading("Open it anywhere"));
+    content.append(&body_label("Press this shortcut in any app to open Clipsy."));
+    content.append(&shortcut_row);
+    content.append(&status);
+    if let Some(setup) = gnome_setup::setup_box(state) {
+        content.append(&setup);
+    }
+    page(&content)
+}
+
+/// Page 3: what stays private and how to clear a tab.
+fn privacy_page() -> gtk::ScrolledWindow {
+    let content = content_box();
+    content.append(&heading("Private by default"));
+    content.append(&body_label("Your history stays on this computer."));
+    content.append(&body_label(
+        "Copies that password managers mark as secret are skipped by default.",
+    ));
+    content.append(&body_label(
+        "Use the 🗑 button next to the tabs to clear a tab's history.",
+    ));
+    page(&content)
+}
+
+/// Page 4: the two switches.
+fn settings_page(state: &Rc<State>) -> gtk::ScrolledWindow {
     let autostart_row = adw::SwitchRow::new();
     autostart_row.set_title("Start at login");
     autostart_row.set_active(state.config.borrow().general.autostart);
@@ -153,58 +352,10 @@ pub fn show(app: &adw::Application, state: &Rc<State>) {
     list.append(&autostart_row);
     list.append(&paste_row);
 
-    let start = gtk::Button::with_label("Start using Clipsy");
-    start.add_css_class("pill");
-    start.add_css_class("suggested-action");
-    start.set_halign(gtk::Align::Center);
-    {
-        let w = window.clone();
-        start.connect_clicked(move |_| finish_welcome(&w));
-    }
-
-    // Closing the window with the title bar also counts as "seen".
-    window.connect_close_request(move |_| {
-        mark_done();
-        glib::Propagation::Proceed
-    });
-
-    let content = gtk::Box::new(gtk::Orientation::Vertical, 16);
-    content.set_margin_top(24);
-    content.set_margin_bottom(24);
-    content.set_margin_start(24);
-    content.set_margin_end(24);
-    content.append(&icon);
-    content.append(&title);
-    content.append(&tagline);
-    content.append(&shortcut_row);
-    content.append(&status);
-    if let Some(setup) = gnome_setup::setup_box(state) {
-        content.append(&setup);
-    }
+    let content = content_box();
+    content.append(&heading("Make it yours"));
     content.append(&list);
-    content.append(&start);
-    // Keep the content a comfortable width when the window is made wider.
-    let clamp = adw::Clamp::new();
-    clamp.set_maximum_size(460);
-    clamp.set_child(Some(&content));
-
-    // The setup box makes the window tall, so the content scrolls on small screens.
-    let scroller = gtk::ScrolledWindow::new();
-    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-    scroller.set_propagate_natural_height(true);
-    scroller.set_max_content_height(640);
-    scroller.set_vexpand(true);
-    scroller.set_child(Some(&clamp));
-
-    // A slim, flat title bar: gives the window a close button and a place to
-    // drag it from (Wayland windows have no frame of their own).
-    let header = adw::HeaderBar::new();
-    header.set_show_title(false);
-    let toolbar = adw::ToolbarView::new();
-    toolbar.add_top_bar(&header);
-    toolbar.set_content(Some(&scroller));
-    window.set_content(Some(&toolbar));
-    window.present();
+    page(&content)
 }
 
 fn install_css() {
@@ -313,7 +464,24 @@ fn finish_welcome(window: &adw::Window) {
 
 #[cfg(test)]
 mod tests {
-    use super::accel_to_keycaps;
+    use super::{accel_to_keycaps, back_visible, is_last_page, next_label};
+
+    #[test]
+    fn first_page_has_no_back_button() {
+        assert!(!back_visible(0));
+        assert!(back_visible(1));
+        assert!(back_visible(3));
+    }
+
+    #[test]
+    fn last_page_is_the_start_button() {
+        assert!(!is_last_page(0, 4));
+        assert!(!is_last_page(2, 4));
+        assert!(is_last_page(3, 4));
+        assert_eq!(next_label(0, 4), "Next");
+        assert_eq!(next_label(2, 4), "Next");
+        assert_eq!(next_label(3, 4), "Start using Clipsy");
+    }
 
     #[test]
     fn keycaps_for_default_shortcut() {

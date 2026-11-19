@@ -1,3 +1,4 @@
+import { Hero } from "@/components/hero";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -20,6 +21,7 @@ export default function App() {
       </a>
       <SiteHeader />
       <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4">
+        <Hero />
         {sections.map((section) => (
           <section key={section.id} id={section.id} className="py-12">
             <h2 className="font-heading text-2xl font-semibold tracking-tight">

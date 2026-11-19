@@ -1,14 +1,15 @@
 //! System tray icon with the Clipsy menu (Windows only).
 //!
-//! Menu clicks are reported as `Verb`s through the callback given to `Tray::new`.
-//! The app loop must call `Tray::poll` regularly (or `Tray::handle_event` for each
-//! event it reads itself), because muda delivers menu events through a global channel.
+//! Menu clicks and left clicks on the icon are reported as `Verb`s through the callback given
+//! to `Tray::new`. A left click opens the popup (`Verb::Open`); the right click keeps showing the
+//! menu. The app loop must call `Tray::poll` regularly (or the `handle_*` methods for each event
+//! it reads itself), because muda and tray-icon deliver events through global channels.
 
 use std::cell::Cell;
 
 use anyhow::Context;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
+use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 use crate::single_instance::Verb;
 
@@ -37,8 +38,9 @@ pub struct Tray {
 
 impl Tray {
     /// Creates the tray icon and menu. `on_verb` is called with the verb for each
-    /// menu item the user activates (only from `poll` or `handle_event`).
-    pub fn new(on_verb: impl Fn(Verb) + 'static) -> anyhow::Result<Tray> {
+    /// menu item the user activates and for each left click (only from `poll` or the
+    /// `handle_*` methods). `tooltip` is shown when the mouse hovers the icon.
+    pub fn new(on_verb: impl Fn(Verb) + 'static, tooltip: &str) -> anyhow::Result<Tray> {
         let open = MenuItem::with_id(ID_OPEN, "Open", true, None);
         let pause_item = MenuItem::with_id(ID_PAUSE, LABEL_PAUSE, true, None);
         let settings = MenuItem::with_id(ID_SETTINGS, "Settings", true, None);
@@ -58,7 +60,7 @@ impl Tray {
             .map_err(|e| anyhow::anyhow!("invalid tray icon image: {e}"))?;
         let tray_icon = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
-            .with_tooltip("Clipsy")
+            .with_tooltip(tooltip)
             .with_icon(icon)
             .build()
             .context("could not create the system tray icon")?;
@@ -71,17 +73,33 @@ impl Tray {
         })
     }
 
-    /// Drains pending menu events and reports each one through the callback.
+    /// Drains pending menu and tray-icon events and reports each one through the callback.
     pub fn poll(&self) {
         while let Ok(event) = MenuEvent::receiver().try_recv() {
             self.handle_event(&event);
+        }
+        while let Ok(event) = TrayIconEvent::receiver().try_recv() {
+            self.handle_tray_event(&event);
+        }
+    }
+
+    /// A left click (button released) on the icon opens the popup. Other clicks are ignored
+    /// here; the right click is handled by the OS and shows the menu.
+    pub fn handle_tray_event(&self, event: &TrayIconEvent) {
+        if let TrayIconEvent::Click {
+            button: MouseButton::Left,
+            button_state: MouseButtonState::Up,
+            ..
+        } = event
+        {
+            (self.on_verb)(Verb::Open);
         }
     }
 
     /// Reports the verb for one menu event. Unknown ids are ignored.
     pub fn handle_event(&self, event: &MenuEvent) {
         let verb = if event.id == ID_OPEN {
-            Verb::Toggle
+            Verb::Open
         } else if event.id == ID_PAUSE {
             // The item toggles: whatever it shows now is the opposite of the state.
             let now_paused = !self.paused.get();

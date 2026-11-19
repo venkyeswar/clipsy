@@ -102,6 +102,17 @@ impl Popup {
         Self { inner }
     }
 
+    /// Show the popup if it is hidden. If it is already shown, only bring it to the front, so
+    /// the search text and selection are kept.
+    pub fn show(&self) {
+        if self.inner.window.window().is_visible() {
+            self.inner.focus_pending.set(true);
+            self.inner.settle(0);
+        } else {
+            self.inner.show();
+        }
+    }
+
     /// Show the popup if it is hidden, hide it if it is shown.
     pub fn toggle(&self) {
         if self.inner.window.window().is_visible() {

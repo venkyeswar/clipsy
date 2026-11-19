@@ -12,7 +12,10 @@ use std::sync::mpsc::Sender;
 /// A command sent from a second process to the running instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verb {
+    /// Show the popup if hidden, hide it if shown (the hotkey).
     Toggle,
+    /// Always show the popup (manual start, second launch, tray click and tray menu).
+    Open,
     Settings,
     Pause,
     Resume,
@@ -24,6 +27,7 @@ pub enum Verb {
 pub fn parse_verb(arg: &str) -> Option<Verb> {
     match arg {
         "toggle" => Some(Verb::Toggle),
+        "open" => Some(Verb::Open),
         "settings" => Some(Verb::Settings),
         "pause" => Some(Verb::Pause),
         "resume" => Some(Verb::Resume),
@@ -37,6 +41,7 @@ pub fn parse_verb(arg: &str) -> Option<Verb> {
 pub fn verb_name(v: Verb) -> &'static str {
     match v {
         Verb::Toggle => "toggle",
+        Verb::Open => "open",
         Verb::Settings => "settings",
         Verb::Pause => "pause",
         Verb::Resume => "resume",
@@ -459,6 +464,7 @@ mod tests {
     #[test]
     fn parses_all_verbs() {
         assert_eq!(parse_verb("toggle"), Some(Verb::Toggle));
+        assert_eq!(parse_verb("open"), Some(Verb::Open));
         assert_eq!(parse_verb("settings"), Some(Verb::Settings));
         assert_eq!(parse_verb("pause"), Some(Verb::Pause));
         assert_eq!(parse_verb("resume"), Some(Verb::Resume));
@@ -471,6 +477,7 @@ mod tests {
         assert_eq!(parse_verb(""), None);
         assert_eq!(parse_verb("explode"), None);
         assert_eq!(parse_verb("TOGGLE"), None);
+        assert_eq!(parse_verb("OPEN"), None);
     }
 
     #[test]
@@ -500,6 +507,7 @@ mod tests {
     fn verb_round_trip_names() {
         for v in [
             Verb::Toggle,
+            Verb::Open,
             Verb::Settings,
             Verb::Pause,
             Verb::Resume,

@@ -43,6 +43,46 @@ pub fn parse_accel(s: &str) -> Result<Accel, String> {
     Ok(acc)
 }
 
+/// Human-readable label for an accelerator, for example "<Ctrl><Shift>v" -> "Ctrl+Shift+V".
+/// Returns `None` when the text is not a valid accelerator, so callers can fall back to a
+/// plain name instead of showing a broken label.
+pub fn shortcut_label(accel: &str) -> Option<String> {
+    parse_accel(accel).ok()?;
+    let mut parts = Vec::new();
+    let mut rest = accel.trim();
+    while let Some(stripped) = rest.trim_start().strip_prefix('<') {
+        let end = stripped.find('>')?;
+        let name = match stripped[..end].to_ascii_lowercase().as_str() {
+            "ctrl" | "control" | "primary" => "Ctrl",
+            "shift" => "Shift",
+            "alt" => "Alt",
+            "super" | "win" => "Win",
+            _ => return None,
+        };
+        parts.push(name.to_string());
+        rest = &stripped[end + 1..];
+    }
+    let key = rest.trim();
+    // A single letter is shown in capitals ("v" -> "V"); names such as "space" or "F5" get an
+    // initial capital.
+    let key_label = if key.len() == 1 {
+        key.to_ascii_uppercase()
+    } else {
+        let mut chars = key.chars();
+        chars.next().map(|c| c.to_ascii_uppercase().to_string() + chars.as_str())?
+    };
+    parts.push(key_label);
+    Some(parts.join("+"))
+}
+
+/// Tray tooltip text. Names the open shortcut when it is known, otherwise plain "Clipsy".
+pub fn tray_tooltip(shortcut: Option<&str>) -> String {
+    match shortcut.and_then(shortcut_label) {
+        Some(label) => format!("Clipsy - {label} opens your history"),
+        None => "Clipsy".to_string(),
+    }
+}
+
 /// Map a key name to (virtual-key code, whether the spelling implies Shift).
 fn vk_from_key(key: &str) -> Option<(u32, bool)> {
     if let [c] = key.as_bytes() {
@@ -166,5 +206,31 @@ mod tests {
         assert!(a.ctrl && a.shift);
         assert_eq!(a.vk, 0x56);
         assert_eq!(parse_accel("  F5 ").unwrap().vk, 0x74);
+    }
+
+    #[test]
+    fn shortcut_label_names_modifiers_and_key() {
+        assert_eq!(shortcut_label("<Ctrl><Shift>v").as_deref(), Some("Ctrl+Shift+V"));
+        assert_eq!(shortcut_label("<Super><Shift>v").as_deref(), Some("Win+Shift+V"));
+        assert_eq!(shortcut_label("<Alt>F4").as_deref(), Some("Alt+F4"));
+        assert_eq!(shortcut_label("<Ctrl>space").as_deref(), Some("Ctrl+Space"));
+        assert_eq!(shortcut_label("F5").as_deref(), Some("F5"));
+    }
+
+    #[test]
+    fn shortcut_label_rejects_invalid_text() {
+        assert_eq!(shortcut_label(""), None);
+        assert_eq!(shortcut_label("<Hyper>v"), None);
+        assert_eq!(shortcut_label("<Ctrl>Pause"), None);
+    }
+
+    #[test]
+    fn tray_tooltip_uses_shortcut_or_plain_name() {
+        assert_eq!(
+            tray_tooltip(Some("<Ctrl><Shift>v")),
+            "Clipsy - Ctrl+Shift+V opens your history"
+        );
+        assert_eq!(tray_tooltip(Some("bogus<")), "Clipsy");
+        assert_eq!(tray_tooltip(None), "Clipsy");
     }
 }

@@ -3,7 +3,8 @@
 //! `run` decides whether this process is the running instance or a CLI verb for one. As the
 //! running instance it starts the clipboard watcher, hotkeys, popup, tray and settings window,
 //! then runs the Slint event loop. A timer on that thread moves messages from the backend,
-//! the hotkeys, the pipe server and the tray into the store and the windows.
+//! the hotkeys, the pipe server and the tray into the store and the windows. A manual start
+//! (no `--background`) also opens the popup once, so the user sees that Clipsy is running.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -18,6 +19,7 @@ use slint::{Timer, TimerMode};
 
 use crate::autostart;
 use crate::backend::WindowsBackend;
+use crate::hotkey::{shortcut_label, tray_tooltip};
 use crate::popup::Popup;
 use crate::settings::SettingsWindow;
 use crate::single_instance::{self, Role, Verb};
@@ -38,8 +40,9 @@ const MAX_VERBS_PER_TICK: usize = 16;
 const USAGE: &str = "Clipsy for Windows - clipboard history
 
 Usage:
-  clipsy-windows                 start Clipsy (does nothing if it is already running)
-  clipsy-windows --background    the same, used by start at login
+  clipsy-windows                 start Clipsy and open the popup (a second start opens it too)
+  clipsy-windows --background    start Clipsy quietly, used by start at login
+  clipsy-windows open            show the clipboard popup
   clipsy-windows toggle          show or hide the clipboard popup
   clipsy-windows settings        open the Settings window
   clipsy-windows pause|resume    pause or resume recording
@@ -81,7 +84,8 @@ pub fn run(args: Vec<String>) -> Result<()> {
             if verb.is_none() && background {
                 return Ok(());
             }
-            return single_instance::forward(verb.unwrap_or(Verb::Toggle));
+            // A plain second start (Start Menu, installer) opens the popup in the running instance.
+            return single_instance::forward(verb.unwrap_or(Verb::Open));
         }
         Role::Primary(guard) => guard,
     };
@@ -95,6 +99,10 @@ pub fn run(args: Vec<String>) -> Result<()> {
         let _ = verb_tx.send(verb);
     }
 
+    // A manual start with no verb opens the popup once the event loop runs. A login start
+    // (`--background`) and a start with a verb stay quiet; the verb does its own showing.
+    let show_on_start = verb.is_none() && !background;
+
     // Read before `Config::load`, which does not create the file.
     let first_run = config_path().is_ok_and(|path| !path.exists());
     let config = Rc::new(RefCell::new(Config::load()));
@@ -105,8 +113,10 @@ pub fn run(args: Vec<String>) -> Result<()> {
         }
     }
     let hotkey_name = config.borrow().shortcuts.toggle_popup.clone();
+    // The readable form ("Ctrl+Shift+V") when the shortcut is valid, else the raw text.
+    let hotkey_label = shortcut_label(&hotkey_name).unwrap_or_else(|| hotkey_name.clone());
     if first_run {
-        tracing::info!("Clipsy is running. Press {hotkey_name} to open it.");
+        tracing::info!("Clipsy is running. Press {hotkey_label} to open it.");
     }
     apply_autostart(&config.borrow());
 
@@ -148,10 +158,17 @@ pub fn run(args: Vec<String>) -> Result<()> {
     // The tray is created after that, so its menu messages are pumped by the Slint event loop.
     let popup = Rc::new(Popup::new(store.clone(), config.clone(), backend.clone()));
     let tray_verbs = verb_tx.clone();
-    let tray = Rc::new(Tray::new(move |verb| {
-        let _ = tray_verbs.send(verb);
-    })?);
+    let tray = Rc::new(Tray::new(
+        move |verb| {
+            let _ = tray_verbs.send(verb);
+        },
+        &tray_tooltip(Some(&hotkey_name)),
+    )?);
     tray.set_paused(config.borrow().privacy.paused);
+    if first_run {
+        // Hover text is the only place a tray app can say where it lives. It stays until the next start.
+        tray.notify("Clipsy", &format!("Press {hotkey_label} to open your history"));
+    }
     for problem in &shortcut_problems {
         tray.notify("Clipsy", problem);
     }
@@ -183,7 +200,13 @@ pub fn run(args: Vec<String>) -> Result<()> {
         prune_timer.start(TimerMode::Repeated, PRUNE_EVERY, move || app.prune());
     }
 
-    // No window is shown at start, so this loop runs until a Quit verb asks it to stop.
+    if show_on_start {
+        // Shown from the event loop, so the window is created and shown on the UI thread.
+        let popup = app.popup.clone();
+        Timer::single_shot(Duration::ZERO, move || popup.show());
+    }
+
+    // The loop runs until a Quit verb asks it to stop.
     slint::run_event_loop_until_quit().context("the event loop stopped with an error")?;
     Ok(())
 }
@@ -297,6 +320,7 @@ impl App {
     fn on_verb(&self, verb: Verb) {
         match verb {
             Verb::Toggle => self.popup.toggle(),
+            Verb::Open => self.popup.show(),
             Verb::Settings => self.show_settings(),
             Verb::Pause => self.set_paused(true),
             Verb::Resume => self.set_paused(false),

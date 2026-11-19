@@ -14,13 +14,13 @@ clipsy-core = { path = "../clipsy-core" }
 anyhow = "1"
 tracing = "0.1"
 image = { version = "0.25", default-features = false, features = ["png", "bmp"] }
+clipsy-backends = { path = "../clipsy-backends" }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "env-filter"] }
 
 [dev-dependencies]
 tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
-clipsy-backends = { path = "../clipsy-backends" }
 slint = "1"
 windows = { version = "0.58", features = [
     "Win32_Foundation",

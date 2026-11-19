@@ -29,7 +29,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WINDOW_EX_STYLE, WINDOW_STYLE,
 };
 
-use crate::formats::{build_event, RawClip};
+use crate::formats::{build_event, png_to_dib, png_to_dibv5, RawClip, CF_DIBV5};
 use crate::util::{cut_at_nul, dword_is_zero, percent_decode, retry};
 
 /// Largest clipboard payload we copy out of another process (guards against huge allocations).
@@ -373,7 +373,16 @@ fn clipboard_payloads(formats: &[Format]) -> Result<Vec<(u32, Vec<u8>)>> {
             out.push((u32::from(CF_UNICODETEXT.0), utf16_nul_bytes(&String::from_utf8_lossy(&f.data))));
         } else if base == "image/png" && !seen_png {
             seen_png = true;
+            // The registered "PNG" format first, so modern apps prefer it. The DIB formats serve
+            // apps that do not know "PNG" (Paint, most terminal tools) and are skipped when the
+            // PNG cannot be decoded.
             push_registered(&mut out, format_ids().png, f.data.clone());
+            if let Some(dibv5) = png_to_dibv5(&f.data) {
+                out.push((CF_DIBV5, dibv5));
+            }
+            if let Some(dib) = png_to_dib(&f.data) {
+                out.push((u32::from(CF_DIB.0), dib));
+            }
         } else if base == "text/html" && !seen_html {
             seen_html = true;
             push_registered(&mut out, format_ids().html, build_cf_html(&f.data));

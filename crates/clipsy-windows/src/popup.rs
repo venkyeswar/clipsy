@@ -26,7 +26,8 @@ use winreg::enums::HKEY_CURRENT_USER;
 use winreg::RegKey;
 
 use crate::backend::WindowsBackend;
-use crate::popup_state::{clamp_to_area, selection_after_delete, PopupState};
+use crate::paste::SendBlocked;
+use crate::popup_state::{clamp_to_area, paste_mode_for, selection_after_delete, PopupState};
 use crate::ui::{ClipPopup, RowData};
 
 /// Logical size of the popup. Keep in step with `width` / `height` in ui/popup.slint.
@@ -36,6 +37,8 @@ const POPUP_HEIGHT: f32 = 520.0;
 const WATCH_EVERY: Duration = Duration::from_millis(150);
 /// Delay before pasting, so the popup has gone and focus is back in the target window.
 const PASTE_DELAY: Duration = Duration::from_millis(50);
+/// Tray notice when SendInput is refused, which happens when the target runs as administrator.
+const BLOCKED_NOTICE: &str = "Windows blocked pasting into that window (it runs as administrator)";
 /// Most rows the popup shows.
 const ROW_LIMIT: usize = 200;
 /// Longest preview shown on one row, in characters.
@@ -80,6 +83,8 @@ struct Inner {
     on_settings: Rc<dyn Fn()>,
     /// Run by the header's Clear button (the same action as the tray's Clear).
     on_clear: Rc<dyn Fn()>,
+    /// Shows a short tray notice with the given text.
+    on_notice: Rc<dyn Fn(&str)>,
 }
 
 impl Popup {
@@ -93,6 +98,7 @@ impl Popup {
         backend: Rc<WindowsBackend>,
         settings: Rc<dyn Fn()>,
         clear: Rc<dyn Fn()>,
+        notice: Rc<dyn Fn(&str)>,
     ) -> Self {
         let window = ClipPopup::new().unwrap_or_else(|e| {
             tracing::error!("could not create the popup window: {e}");
@@ -115,6 +121,7 @@ impl Popup {
             preview_open: Cell::new(false),
             on_settings: settings,
             on_clear: clear,
+            on_notice: notice,
         });
         inner.connect();
         Self { inner }
@@ -473,9 +480,14 @@ impl Inner {
         if paste_on_select {
             self.backend.set_terminal_apps(&terminal_apps);
             let backend = Rc::clone(&self.backend);
+            let notice = Rc::clone(&self.on_notice);
+            let mode: PasteMode = paste_mode_for(item.kind, plain);
             Timer::single_shot(PASTE_DELAY, move || {
-                if let Err(e) = backend.paste(PasteMode::Normal) {
+                if let Err(e) = backend.paste(mode) {
                     tracing::warn!("paste failed: {e:#}");
+                    if e.downcast_ref::<SendBlocked>().is_some() {
+                        notice(BLOCKED_NOTICE);
+                    }
                 }
             });
         }

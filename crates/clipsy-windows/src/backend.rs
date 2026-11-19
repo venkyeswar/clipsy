@@ -27,9 +27,9 @@ use crate::clipboard;
 use crate::hotkey::{parse_accel, Accel};
 use crate::paste::win::{
     exe_name, focus_and_wait, foreground_window, from_raw, is_own_window, modifiers_held, send_chord, to_raw,
-    wait_until, MODIFIER_TIMEOUT, POLL_EVERY,
+    wait_until, window_class, MODIFIER_TIMEOUT, POLL_EVERY,
 };
-use crate::terminals::is_terminal;
+use crate::paste::keys_for_apps;
 
 /// Null window handle: hotkeys then post to the hotkey thread's own queue.
 const NO_WINDOW: HWND = HWND(std::ptr::null_mut::<c_void>());
@@ -320,14 +320,16 @@ impl Backend for WindowsBackend {
             tracing::warn!("windows paste: a modifier is still held after {MODIFIER_TIMEOUT:?}, pasting anyway");
         }
 
-        let terminal = mode == PasteMode::Terminal
-            || exe_name(target).is_some_and(|exe| is_terminal(&exe, &self.terminal_apps()));
+        // Console windows, Windows Terminal and terminal executables each need their own chord.
+        let class = window_class(target).unwrap_or_default();
+        let exe = exe_name(target);
+        let keys = keys_for_apps(&class, exe.as_deref(), mode, &self.terminal_apps());
         tracing::info!(
-            "windows paste: window={:#x} terminal={terminal} keys={}",
+            "windows paste: window={:#x} class={class:?} exe={:?} mode={mode:?} keys={keys:?}",
             to_raw(target),
-            if terminal { "Ctrl+Shift+V" } else { "Ctrl+V" },
+            exe.as_deref().unwrap_or("unknown"),
         );
-        send_chord(terminal)
+        send_chord(keys)
     }
 
     fn supports_paste(&self) -> bool {

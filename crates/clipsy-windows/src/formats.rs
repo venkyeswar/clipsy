@@ -72,6 +72,71 @@ pub fn dib_to_png(dib: &[u8]) -> Option<Vec<u8>> {
     Some(png)
 }
 
+/// Clipboard format id of CF_DIBV5 (BITMAPV5HEADER with colour masks and colour space).
+pub const CF_DIBV5: u32 = 17;
+
+/// Convert PNG bytes into a CF_DIB payload: a 40-byte BITMAPINFOHEADER followed by bottom-up
+/// 32-bit BGRA rows (BI_RGB). Returns None when the bytes are not a PNG image.
+pub fn png_to_dib(png: &[u8]) -> Option<Vec<u8>> {
+    let (width, height, pixels) = decode_png_bgra(png)?;
+    let mut out = Vec::with_capacity(40 + pixels.len());
+    out.extend_from_slice(&40u32.to_le_bytes()); // biSize
+    out.extend_from_slice(&width.to_le_bytes()); // biWidth
+    out.extend_from_slice(&height.to_le_bytes()); // biHeight: positive means bottom-up
+    out.extend_from_slice(&1u16.to_le_bytes()); // biPlanes
+    out.extend_from_slice(&32u16.to_le_bytes()); // biBitCount
+    out.extend_from_slice(&0u32.to_le_bytes()); // biCompression = BI_RGB
+    out.extend_from_slice(&(pixels.len() as u32).to_le_bytes()); // biSizeImage
+    out.extend_from_slice(&[0u8; 16]); // resolution and colour counts (unused)
+    out.extend_from_slice(&pixels);
+    Some(out)
+}
+
+/// Convert PNG bytes into a CF_DIBV5 payload: a 124-byte BITMAPV5HEADER using BI_BITFIELDS with
+/// red, green, blue and alpha masks, sRGB colour space, then bottom-up 32-bit BGRA rows.
+/// Returns None when the bytes are not a PNG image.
+pub fn png_to_dibv5(png: &[u8]) -> Option<Vec<u8>> {
+    let (width, height, pixels) = decode_png_bgra(png)?;
+    let mut out = Vec::with_capacity(124 + pixels.len());
+    out.extend_from_slice(&124u32.to_le_bytes()); // bV5Size
+    out.extend_from_slice(&width.to_le_bytes()); // bV5Width
+    out.extend_from_slice(&height.to_le_bytes()); // bV5Height: positive means bottom-up
+    out.extend_from_slice(&1u16.to_le_bytes()); // bV5Planes
+    out.extend_from_slice(&32u16.to_le_bytes()); // bV5BitCount
+    out.extend_from_slice(&3u32.to_le_bytes()); // bV5Compression = BI_BITFIELDS
+    out.extend_from_slice(&(pixels.len() as u32).to_le_bytes()); // bV5SizeImage
+    out.extend_from_slice(&[0u8; 8]); // bV5XPelsPerMeter, bV5YPelsPerMeter
+    out.extend_from_slice(&[0u8; 8]); // bV5ClrUsed, bV5ClrImportant
+    out.extend_from_slice(&0x00FF_0000u32.to_le_bytes()); // bV5RedMask
+    out.extend_from_slice(&0x0000_FF00u32.to_le_bytes()); // bV5GreenMask
+    out.extend_from_slice(&0x0000_00FFu32.to_le_bytes()); // bV5BlueMask
+    out.extend_from_slice(&0xFF00_0000u32.to_le_bytes()); // bV5AlphaMask
+    out.extend_from_slice(&0x7352_4742u32.to_le_bytes()); // bV5CSType = LCS_sRGB
+    out.extend_from_slice(&[0u8; 36]); // bV5Endpoints (CIEXYZTRIPLE, unused for sRGB)
+    out.extend_from_slice(&[0u8; 12]); // bV5GammaRed, bV5GammaGreen, bV5GammaBlue
+    out.extend_from_slice(&4u32.to_le_bytes()); // bV5Intent = LCS_GM_IMAGES
+    out.extend_from_slice(&[0u8; 12]); // bV5ProfileData, bV5ProfileSize, bV5Reserved
+    debug_assert_eq!(out.len(), 124);
+    out.extend_from_slice(&pixels);
+    Some(out)
+}
+
+/// Decode PNG bytes to (width, height, bottom-up BGRA pixel rows) as DIB stores them.
+fn decode_png_bgra(png: &[u8]) -> Option<(i32, i32, Vec<u8>)> {
+    let img = image::load_from_memory_with_format(png, image::ImageFormat::Png).ok()?.into_rgba8();
+    let (w, h) = img.dimensions();
+    let width = i32::try_from(w).ok()?;
+    let height = i32::try_from(h).ok()?;
+    let mut pixels = Vec::with_capacity(w as usize * h as usize * 4);
+    for row in img.rows().rev() {
+        for px in row {
+            let [r, g, b, a] = px.0;
+            pixels.extend_from_slice(&[b, g, r, a]);
+        }
+    }
+    Some((width, height, pixels))
+}
+
 /// Turn Windows paths into a `text/uri-list` body: one `file:///` URI per line, CRLF endings.
 pub fn files_to_uri_list(paths: &[String]) -> String {
     paths
@@ -337,5 +402,56 @@ mod tests {
         ];
         assert_eq!(clip_text_from_formats(&formats).as_deref(), Some("hi"));
         assert_eq!(clip_text_from_formats(&formats[..1]), None);
+    }
+
+    /// A 2x2 RGBA PNG: top row red, green; bottom row blue, fully transparent.
+    fn png_2x2() -> Vec<u8> {
+        let mut img = image::RgbaImage::new(2, 2);
+        img.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
+        img.put_pixel(1, 0, image::Rgba([0, 255, 0, 255]));
+        img.put_pixel(0, 1, image::Rgba([0, 0, 255, 255]));
+        img.put_pixel(1, 1, image::Rgba([0, 0, 0, 0]));
+        let mut out = Vec::new();
+        img.write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png).unwrap();
+        out
+    }
+
+    fn u32_le_at(data: &[u8], off: usize) -> u32 {
+        u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]])
+    }
+
+    #[test]
+    fn png_to_dib_has_info_header_and_pixel_bytes() {
+        let dib = png_to_dib(&png_2x2()).unwrap();
+        assert_eq!(u32_le_at(&dib, 0), 40, "biSize");
+        assert_eq!(u32_le_at(&dib, 4), 2, "biWidth");
+        assert_eq!(u32_le_at(&dib, 8), 2, "biHeight");
+        assert_eq!(u16::from_le_bytes([dib[14], dib[15]]), 32, "biBitCount");
+        assert_eq!(dib.len(), 40 + 16);
+        // Bottom-up: the first stored row is the image's bottom row, blue then transparent, as BGRA.
+        assert_eq!(&dib[40..44], &[255, 0, 0, 255]);
+        assert_eq!(&dib[44..48], &[0, 0, 0, 0]);
+        // The top row (red, green) comes last.
+        assert_eq!(&dib[48..52], &[0, 0, 255, 255]);
+    }
+
+    #[test]
+    fn png_to_dibv5_header_size_is_124() {
+        let dib = png_to_dibv5(&png_2x2()).unwrap();
+        assert_eq!(u32_le_at(&dib, 0), 124, "bV5Size");
+        assert_eq!(u32_le_at(&dib, 16), 3, "BI_BITFIELDS");
+        assert_eq!(u32_le_at(&dib, 40), 0x00FF_0000, "red mask");
+        assert_eq!(u32_le_at(&dib, 44), 0x0000_FF00, "green mask");
+        assert_eq!(u32_le_at(&dib, 48), 0x0000_00FF, "blue mask");
+        assert_eq!(u32_le_at(&dib, 52), 0xFF00_0000, "alpha mask");
+        assert_eq!(u32_le_at(&dib, 56), 0x7352_4742, "LCS_sRGB");
+        assert_eq!(dib.len(), 124 + 16);
+        assert_eq!(&dib[124..128], &[255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn png_to_dib_garbage_yields_none() {
+        assert!(png_to_dib(&[1, 2, 3]).is_none());
+        assert!(png_to_dibv5(&[1, 2, 3]).is_none());
     }
 }

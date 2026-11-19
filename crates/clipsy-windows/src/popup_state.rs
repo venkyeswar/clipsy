@@ -3,7 +3,8 @@
 //! This type holds no store or UI handles. Typing, backspace and filter changes only update
 //! the state; the UI layer re-queries the store and calls `set_items` with the result.
 
-use clipsy_core::{ClipItem, Filter};
+use clipsy_backends::PasteMode;
+use clipsy_core::{ClipItem, Filter, Kind};
 
 pub struct PopupState {
     pub query: String,
@@ -102,6 +103,16 @@ pub fn selection_after_delete(selected: usize, len_before: usize) -> usize {
     }
 }
 
+/// Paste mode for the row the user activated. Image rows use `Binary` (plain Ctrl+V even in a
+/// terminal, so the target reads the image); `plain` (Shift+Enter) and other rows use `Normal`.
+pub fn paste_mode_for(kind: Kind, plain: bool) -> PasteMode {
+    if kind == Kind::Image && !plain {
+        PasteMode::Binary
+    } else {
+        PasteMode::Normal
+    }
+}
+
 /// Move a popup's top-left corner so the whole popup lies inside `area`.
 ///
 /// `area` is (left, top, right, bottom). When the popup is larger than the area, it is aligned
@@ -119,7 +130,16 @@ pub fn clamp_to_area(pos: (i32, i32), size: (i32, i32), area: (i32, i32, i32, i3
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clipsy_backends::PasteMode;
     use clipsy_core::Kind;
+
+    #[test]
+    fn image_rows_use_binary_paste_mode() {
+        assert_eq!(paste_mode_for(Kind::Image, false), PasteMode::Binary);
+        assert_eq!(paste_mode_for(Kind::Image, true), PasteMode::Normal);
+        assert_eq!(paste_mode_for(Kind::Text, false), PasteMode::Normal);
+        assert_eq!(paste_mode_for(Kind::Files, false), PasteMode::Normal);
+    }
 
     fn item(id: i64) -> ClipItem {
         ClipItem {

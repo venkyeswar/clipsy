@@ -1,6 +1,10 @@
 //! Windows paste injection: the key chord that pastes, plus (Windows only) focusing the
 //! remembered window and sending the chord with `SendInput`.
 
+use clipsy_backends::PasteMode;
+
+use crate::terminals::is_terminal;
+
 /// Virtual-key code of Ctrl (`VK_CONTROL`).
 pub const VK_CONTROL: u16 = 0x11;
 /// Virtual-key code of Shift (`VK_SHIFT`).
@@ -8,19 +12,72 @@ pub const VK_SHIFT: u16 = 0x10;
 /// Virtual-key code of the V key.
 pub const VK_V: u16 = 0x56;
 
-/// Key events for one paste, as (virtual key, is_key_down) pairs in the order they are sent.
+/// Virtual-key code of Insert (`VK_INSERT`).
+pub const VK_INSERT: u16 = 0x2D;
+
+/// Which key chord pastes into the target window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasteKeys {
+    /// Ctrl+V: most apps, and every binary (image) paste.
+    CtrlV,
+    /// Ctrl+Shift+V: Windows Terminal and other terminal emulators.
+    CtrlShiftV,
+    /// Shift+Insert: classic console windows (cmd.exe, PowerShell in conhost).
+    ShiftInsert,
+}
+
+/// Window class of classic console windows (conhost).
+pub const CONSOLE_WINDOW_CLASS: &str = "ConsoleWindowClass";
+/// Window class of the Windows Terminal host window.
+pub const TERMINAL_WINDOW_CLASS: &str = "CASCADIA_HOSTING_WINDOW_CLASS";
+
+/// Chooses the paste chord for a target window. Pure: `class` is the window class name (empty
+/// when unknown), `exe` the executable file name or path when it could be read.
 ///
-/// Normal paste is Ctrl+V. Terminal paste (`terminal == true`) is Ctrl+Shift+V. Keys go
-/// down in the order Ctrl, Shift, V and come up in the reverse order.
-pub fn key_sequence(terminal: bool) -> Vec<(u16, bool)> {
-    let mut held = vec![VK_CONTROL];
-    if terminal {
-        held.push(VK_SHIFT);
+/// Binary (image) pastes are always Ctrl+V. Then the window class decides: console windows use
+/// Shift+Insert and Windows Terminal uses Ctrl+Shift+V. Otherwise a terminal executable (or
+/// `PasteMode::Terminal`) uses Ctrl+Shift+V, and everything else uses Ctrl+V.
+pub fn keys_for(class: &str, exe: Option<&str>, mode: PasteMode) -> PasteKeys {
+    keys_for_apps(class, exe, mode, &[])
+}
+
+/// `keys_for` plus the user's own terminal executables (`terminal_apps` from the config).
+pub fn keys_for_apps(class: &str, exe: Option<&str>, mode: PasteMode, terminal_apps: &[String]) -> PasteKeys {
+    if mode == PasteMode::Binary {
+        return PasteKeys::CtrlV;
     }
-    held.push(VK_V);
+    if class == CONSOLE_WINDOW_CLASS {
+        return PasteKeys::ShiftInsert;
+    }
+    if class == TERMINAL_WINDOW_CLASS {
+        return PasteKeys::CtrlShiftV;
+    }
+    let terminal_exe = exe.is_some_and(|e| is_terminal(e, terminal_apps));
+    if mode == PasteMode::Terminal || terminal_exe {
+        PasteKeys::CtrlShiftV
+    } else {
+        PasteKeys::CtrlV
+    }
+}
+
+/// Key events for a paste chord, as (virtual key, is_key_down) pairs in the order they are sent.
+/// Modifiers go down first and come up in the reverse order.
+pub fn keys_sequence_for(keys: PasteKeys) -> Vec<(u16, bool)> {
+    let held: Vec<u16> = match keys {
+        PasteKeys::CtrlV => vec![VK_CONTROL, VK_V],
+        PasteKeys::CtrlShiftV => vec![VK_CONTROL, VK_SHIFT, VK_V],
+        PasteKeys::ShiftInsert => vec![VK_SHIFT, VK_INSERT],
+    };
     let mut events: Vec<(u16, bool)> = held.iter().map(|&vk| (vk, true)).collect();
     events.extend(held.iter().rev().map(|&vk| (vk, false)));
     events
+}
+
+/// Key events for one paste, as (virtual key, is_key_down) pairs in the order they are sent.
+///
+/// Normal paste is Ctrl+V. Terminal paste (`terminal == true`) is Ctrl+Shift+V.
+pub fn key_sequence(terminal: bool) -> Vec<(u16, bool)> {
+    keys_sequence_for(if terminal { PasteKeys::CtrlShiftV } else { PasteKeys::CtrlV })
 }
 
 /// Win32 side of paste: focusing a window, reading its executable name and sending keys.
@@ -30,7 +87,7 @@ pub(crate) mod win {
     use std::ffi::c_void;
     use std::time::{Duration, Instant};
 
-    use anyhow::{bail, Result};
+    use anyhow::Result;
     use windows::core::PWSTR;
     use windows::Win32::Foundation::{CloseHandle, HWND};
     use windows::Win32::System::Threading::{
@@ -42,10 +99,10 @@ pub(crate) mod win {
         VIRTUAL_KEY,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetForegroundWindow, GetWindowThreadProcessId, IsWindow, SetForegroundWindow,
+        GetClassNameW, GetForegroundWindow, GetWindowThreadProcessId, IsWindow, SetForegroundWindow,
     };
 
-    use super::{key_sequence, release_sequence, VK_CONTROL, VK_SHIFT};
+    use super::{keys_sequence_for, release_sequence, PasteKeys, SendBlocked, VK_CONTROL, VK_SHIFT};
 
     /// How long to wait for the target window to become the foreground window.
     pub(crate) const FOCUS_TIMEOUT: Duration = Duration::from_millis(500);
@@ -82,6 +139,17 @@ pub(crate) mod win {
     pub(crate) fn is_own_window(hwnd: HWND) -> bool {
         let pid = owner_pid(hwnd);
         pid != 0 && pid == std::process::id()
+    }
+
+    /// Window class name of `hwnd` (for example `ConsoleWindowClass`), or None when it cannot be read.
+    pub(crate) fn window_class(hwnd: HWND) -> Option<String> {
+        let mut buf = [0u16; 256];
+        // SAFETY: `buf` is a writable buffer of `buf.len()` UTF-16 units for the whole call.
+        let len = unsafe { GetClassNameW(hwnd, &mut buf) };
+        if len <= 0 {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&buf[..len as usize]))
     }
 
     /// Executable file name (full path) of the process that owns `hwnd`, if it can be read.
@@ -161,23 +229,20 @@ pub(crate) mod win {
         Ok(unsafe { SendInput(&inputs, size) } as usize)
     }
 
-    /// Send the paste chord (Ctrl+V, or Ctrl+Shift+V when `terminal`) with SendInput.
+    /// Send a paste chord with SendInput.
     ///
     /// If only part of the chord is injected, the keys that did go down are released again
-    /// before the error is returned, so no modifier stays stuck.
-    pub(crate) fn send_chord(terminal: bool) -> Result<()> {
-        let events = key_sequence(terminal);
+    /// before the error is returned (a `SendBlocked`), so no modifier stays stuck.
+    pub(crate) fn send_chord(keys: PasteKeys) -> Result<()> {
+        let events = keys_sequence_for(keys);
         let sent = send_events(&events)?;
         if sent == events.len() {
             return Ok(());
         }
         // Key-ups for keys that were never pressed are harmless, so release the whole chord.
-        let released = send_events(&release_sequence(terminal)).unwrap_or(0);
+        let released = send_events(&release_sequence(keys)).unwrap_or(0);
         tracing::warn!("SendInput sent {sent} of {} paste key events; released {released}", events.len());
-        bail!(
-            "SendInput sent {sent} of {} key events (the target window may be running as administrator)",
-            events.len()
-        )
+        Err(SendBlocked { sent, expected: events.len() }.into())
     }
 
     /// Call `done` every `every` until it returns true or `timeout` passes. Returns the last result.
@@ -205,12 +270,32 @@ pub(crate) mod win {
     }
 }
 
-/// Key-up events that release every key a paste chord may have pressed: V, then Shift
-/// (terminal only), then Ctrl. Sent after a partly failed SendInput so no key stays held.
-pub fn release_sequence(terminal: bool) -> Vec<(u16, bool)> {
+/// Key-up events that release every key a paste chord may have pressed. Sent after a partly
+/// failed SendInput so no key stays held.
+pub fn release_sequence(keys: PasteKeys) -> Vec<(u16, bool)> {
     // The up events of the chord, already in reverse order of the downs.
-    key_sequence(terminal).into_iter().filter(|&(_, down)| !down).collect()
+    keys_sequence_for(keys).into_iter().filter(|&(_, down)| !down).collect()
 }
+
+/// Error from `send_chord` when SendInput injected only part of a paste chord. The usual cause
+/// is a target window running as administrator, which blocks input from a normal process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SendBlocked {
+    pub sent: usize,
+    pub expected: usize,
+}
+
+impl std::fmt::Display for SendBlocked {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SendInput sent {} of {} key events (the target window may be running as administrator)",
+            self.sent, self.expected
+        )
+    }
+}
+
+impl std::error::Error for SendBlocked {}
 
 #[cfg(test)]
 mod tests {
@@ -218,13 +303,13 @@ mod tests {
 
     #[test]
     fn release_sequence_normal_releases_v_then_ctrl() {
-        assert_eq!(release_sequence(false), vec![(0x56, false), (0x11, false)]);
+        assert_eq!(release_sequence(PasteKeys::CtrlV), vec![(0x56, false), (0x11, false)]);
     }
 
     #[test]
     fn release_sequence_terminal_releases_v_shift_ctrl() {
         assert_eq!(
-            release_sequence(true),
+            release_sequence(PasteKeys::CtrlShiftV),
             vec![(0x56, false), (0x10, false), (0x11, false)]
         );
     }
@@ -249,6 +334,56 @@ mod tests {
                 (0x10, false),
                 (0x11, false),
             ]
+        );
+    }
+
+    #[test]
+    fn console_window_class_uses_shift_insert() {
+        assert_eq!(keys_for("ConsoleWindowClass", Some("cmd.exe"), PasteMode::Normal), PasteKeys::ShiftInsert);
+        assert_eq!(keys_for("ConsoleWindowClass", None, PasteMode::Normal), PasteKeys::ShiftInsert);
+    }
+
+    #[test]
+    fn cascadia_class_uses_ctrl_shift_v() {
+        assert_eq!(
+            keys_for("CASCADIA_HOSTING_WINDOW_CLASS", Some("WindowsTerminal.exe"), PasteMode::Normal),
+            PasteKeys::CtrlShiftV
+        );
+        assert_eq!(keys_for("CASCADIA_HOSTING_WINDOW_CLASS", None, PasteMode::Normal), PasteKeys::CtrlShiftV);
+    }
+
+    #[test]
+    fn binary_mode_is_plain_ctrl_v_even_in_terminal() {
+        assert_eq!(keys_for("", Some("WindowsTerminal.exe"), PasteMode::Binary), PasteKeys::CtrlV);
+        assert_eq!(keys_for("CASCADIA_HOSTING_WINDOW_CLASS", None, PasteMode::Binary), PasteKeys::CtrlV);
+        assert_eq!(keys_for("ConsoleWindowClass", Some("cmd.exe"), PasteMode::Binary), PasteKeys::CtrlV);
+    }
+
+    #[test]
+    fn unknown_app_uses_ctrl_v() {
+        assert_eq!(keys_for("Chrome_WidgetWin_1", Some("chrome.exe"), PasteMode::Normal), PasteKeys::CtrlV);
+        assert_eq!(keys_for("Notepad", None, PasteMode::Normal), PasteKeys::CtrlV);
+    }
+
+    #[test]
+    fn terminal_exe_without_known_class_uses_ctrl_shift_v() {
+        assert_eq!(keys_for("", Some(r"C:\Program Files\PowerShell\7\pwsh.exe"), PasteMode::Normal), PasteKeys::CtrlShiftV);
+        assert_eq!(keys_for("", Some("kitty.exe"), PasteMode::Normal), PasteKeys::CtrlShiftV);
+    }
+
+    #[test]
+    fn user_terminal_list_is_used() {
+        let extra = vec!["code".to_string()];
+        assert_eq!(keys_for_apps("", Some("Code.exe"), PasteMode::Normal, &extra), PasteKeys::CtrlShiftV);
+        assert_eq!(keys_for_apps("", Some("Code.exe"), PasteMode::Binary, &extra), PasteKeys::CtrlV);
+        assert_eq!(keys_for_apps("", Some("chrome.exe"), PasteMode::Normal, &extra), PasteKeys::CtrlV);
+    }
+
+    #[test]
+    fn shift_insert_sequence_is_shift_ins_chord() {
+        assert_eq!(
+            keys_sequence_for(PasteKeys::ShiftInsert),
+            vec![(0x10, true), (0x2D, true), (0x2D, false), (0x10, false)]
         );
     }
 }

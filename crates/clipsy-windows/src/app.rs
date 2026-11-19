@@ -189,6 +189,10 @@ pub fn run(args: Vec<String>) -> Result<()> {
     // the same actions.
     let popup_settings_verbs = verb_tx.clone();
     let popup_clear_verbs = verb_tx.clone();
+    // The tray does not exist yet when the popup is built, so the popup's notices go through
+    // this slot, which is filled right after the tray is created.
+    let tray_slot: Rc<RefCell<Option<Rc<Tray>>>> = Rc::new(RefCell::new(None));
+    let notice_slot = tray_slot.clone();
     let popup = Rc::new(Popup::new(
         store.clone(),
         config.clone(),
@@ -199,6 +203,11 @@ pub fn run(args: Vec<String>) -> Result<()> {
         Rc::new(move || {
             let _ = popup_clear_verbs.send(Verb::Clear);
         }),
+        Rc::new(move |text: &str| {
+            if let Some(tray) = notice_slot.borrow().as_ref() {
+                tray.notify("Clipsy", text);
+            }
+        }),
     ));
     let tray_verbs = verb_tx.clone();
     let tray = Rc::new(Tray::new(
@@ -207,6 +216,7 @@ pub fn run(args: Vec<String>) -> Result<()> {
         },
         &tray_tooltip(backend.bound_toggle().as_deref()),
     )?);
+    *tray_slot.borrow_mut() = Some(tray.clone());
     tray.set_paused(config.borrow().privacy.paused);
     if first_run {
         // Hover text is the only place a tray app can say where it lives. It stays until the next start.

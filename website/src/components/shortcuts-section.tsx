@@ -15,7 +15,7 @@ export function ShortcutsSection() {
 
   return (
     <div>
-      <h2 className="font-heading text-xl font-semibold tracking-[-0.02em] sm:text-2xl">Keyboard shortcuts</h2>
+      <h2 className="font-heading text-[clamp(1.25rem,1.05rem+0.7vw,1.75rem)] font-semibold tracking-[-0.02em]">Keyboard shortcuts</h2>
       <p className="mt-1 max-w-[60ch] text-muted-foreground">
         The shortcut opens Clipsy from anywhere. The other keys work inside the Clipsy window.
       </p>

@@ -126,13 +126,13 @@ export function Hero() {
     <section
       id="top-hero"
       aria-labelledby="hero-title"
-      className="relative isolate grid grid-cols-[minmax(0,1fr)] items-center gap-10 py-8 sm:py-10 lg:grid-cols-[minmax(0,1fr)_25rem] lg:gap-16 lg:py-14 xl:grid-cols-[minmax(0,1fr)_27rem]"
+      className="relative isolate grid grid-cols-[minmax(0,1fr)] items-center gap-10 py-8 sm:py-10 lg:grid-cols-[minmax(0,1fr)_25rem] lg:gap-16 lg:py-14 xl:grid-cols-[minmax(0,1fr)_27rem] 3xl:grid-cols-[minmax(0,1fr)_34rem]"
     >
       <div aria-hidden="true" className="hero-dots pointer-events-none absolute inset-y-0 -right-16 left-1/3 -z-10" />
       <div className="flex min-w-0 flex-col gap-5">
         <h1
           id="hero-title"
-          className="max-w-[14ch] font-heading text-[2.5rem] leading-[1.02] font-semibold tracking-[-0.035em] text-balance sm:text-[3.25rem] lg:text-[3.75rem]"
+          className="max-w-[14ch] font-heading text-[clamp(2.5rem,1.6rem+2.6vw,4.5rem)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance"
         >
           Everything you copied, one shortcut away.
         </h1>

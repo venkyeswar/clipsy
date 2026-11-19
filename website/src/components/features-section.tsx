@@ -157,7 +157,7 @@ export function FeaturesSection() {
   return (
     <div>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
-        <h2 className="font-heading text-xl font-semibold tracking-[-0.02em] sm:text-2xl">What Clipsy does</h2>
+        <h2 className="font-heading text-[clamp(1.25rem,1.05rem+0.7vw,1.75rem)] font-semibold tracking-[-0.02em]">What Clipsy does</h2>
         <p className="max-w-[52ch] text-muted-foreground sm:text-right">
           Clipsy watches what you copy, keeps it in order, and stays out of the way until you
           need it again.

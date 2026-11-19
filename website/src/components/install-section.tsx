@@ -136,6 +136,20 @@ function WindowsTabPanel({ tab, waiting }: { tab: WindowsInstallTab; waiting: bo
   );
 }
 
+/** The heading stays fixed above the scrolling body (see ScrollPanel in App). */
+export function InstallHeading() {
+  return (
+    <div>
+      <h2 id="install-heading" className="font-heading text-[clamp(1.25rem,1.05rem+0.7vw,1.75rem)] font-semibold tracking-[-0.02em]">
+        Install Clipsy
+      </h2>
+      <p className="mt-1 max-w-[60ch] text-muted-foreground">
+        Pick the way that suits you. Every option installs the same app.
+      </p>
+    </div>
+  );
+}
+
 export function InstallSection() {
   const { releases, status } = useReleases();
   const { platform, setPlatform } = useSelectedPlatform();
@@ -159,12 +173,7 @@ export function InstallSection() {
 
   return (
     <div className="flex flex-col">
-      <h2 className="font-heading text-xl font-semibold tracking-[-0.02em] sm:text-2xl">Install Clipsy</h2>
-      <p className="mt-1 max-w-[60ch] text-muted-foreground">
-        Pick the way that suits you. Every option installs the same app.
-      </p>
-
-      <div className="mt-4">
+      <div>
         <PlatformSwitch value={platform} onChange={setPlatform} />
       </div>
 

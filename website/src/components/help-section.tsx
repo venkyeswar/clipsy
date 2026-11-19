@@ -43,7 +43,7 @@ function Labelled({ label, command, after }: { label: string; command: string; a
 export function HelpSection() {
   return (
     <div>
-      <h2 className="font-heading text-xl font-semibold tracking-[-0.02em] sm:text-2xl">Help</h2>
+      <h2 className="font-heading text-[clamp(1.25rem,1.05rem+0.7vw,1.75rem)] font-semibold tracking-[-0.02em]">Help</h2>
       <p className="mt-1 max-w-[60ch] text-muted-foreground">Answers to the questions people ask most.</p>
 
       <Accordion className="mt-4 overflow-hidden rounded-xl border border-border bg-card">

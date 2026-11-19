@@ -18,6 +18,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { config } from "@/config";
+import { PAGE_CONTAINER } from "@/lib/layout";
 import { useTheme, type Theme } from "@/components/theme-provider";
 import { useReleases } from "@/hooks/use-releases";
 import { useSelectedPlatform } from "@/lib/platform-context";
@@ -139,7 +140,7 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
+      <div className={`${PAGE_CONTAINER} flex h-14 items-center justify-between gap-2`}>
         <a
           href="#top"
           className="-ml-1 flex min-h-11 items-center gap-2 rounded-lg px-1 font-heading text-lg font-semibold tracking-[-0.02em]"

@@ -25,7 +25,7 @@ import { CHECKSUM_VERIFY_COMMAND, windowsVerifyCommands } from "@/lib/install-co
 import { latestStable, type Release, type ReleaseAsset } from "@/lib/releases";
 
 const RELEASES_URL = `https://github.com/${config.repo}/releases`;
-const SECTION_CLASS = "flex h-full flex-col";
+const BODY_CLASS = "flex min-w-0 flex-col";
 const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
 
 function formatDate(iso: string): string {
@@ -216,37 +216,40 @@ function shipsSummary(release: Release): string {
   return parts.length > 0 ? parts.join(", ") : "no installers yet";
 }
 
+/** The heading stays fixed above the scrolling body (see ScrollPanel in App). */
+export function DownloadsHeading() {
+  return (
+    <div>
+      <h2 id="downloads-heading" className="font-heading text-[clamp(1.25rem,1.05rem+0.7vw,1.75rem)] font-semibold tracking-[-0.02em]">
+        Downloads
+      </h2>
+      <p className="mt-1 max-w-[60ch] text-muted-foreground">
+        The latest version is on top. Older versions stay available.
+      </p>
+    </div>
+  );
+}
+
 export function DownloadsSection() {
   const { releases, status } = useReleases();
   const { platform } = useSelectedPlatform();
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
-  const header = (
-    <>
-      <h2 className="font-heading text-xl font-semibold tracking-[-0.02em] sm:text-2xl">Downloads</h2>
-      <p className="mt-1 max-w-[60ch] text-muted-foreground">
-        The latest version is on top. Older versions stay available.
-      </p>
-    </>
-  );
-
   if (status === "loading") {
     return (
-      <section id="downloads" className={SECTION_CLASS} aria-busy="true">
-        {header}
-        <div className="mt-4 flex flex-col gap-4">
+      <div className={BODY_CLASS} aria-busy="true">
+        <div className="flex flex-col gap-4">
           <Skeleton aria-hidden="true" className="h-44 w-full" />
           <Skeleton aria-hidden="true" className="h-24 w-full" />
         </div>
-      </section>
+      </div>
     );
   }
 
   if (status === "empty" || releases.length === 0) {
     return (
-      <section id="downloads" className={SECTION_CLASS}>
-        {header}
-        <div className="mt-4">
+      <div className={BODY_CLASS}>
+        <div>
           <p className="text-muted-foreground">No releases are published yet.</p>
           <Button
             variant="outline"
@@ -256,7 +259,7 @@ export function DownloadsSection() {
             View releases on GitHub
           </Button>
         </div>
-      </section>
+      </div>
     );
   }
 
@@ -265,9 +268,7 @@ export function DownloadsSection() {
   const previous = releases.filter((release) => release.tag !== latest?.tag);
 
   return (
-    <section id="downloads" className={SECTION_CLASS}>
-      {header}
-
+    <div className={BODY_CLASS}>
       <div aria-live="polite" className="mt-2 min-h-0 text-sm text-muted-foreground empty:hidden">
         {status === "snapshot" &&
           "Showing the last saved release list because GitHub could not be reached."}
@@ -370,6 +371,6 @@ export function DownloadsSection() {
           <p className="text-sm text-muted-foreground">No other releases yet.</p>
         )}
       </div>
-    </section>
+    </div>
   );
 }

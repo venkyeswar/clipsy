@@ -55,6 +55,8 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    /* Extra breakpoint for very wide screens (zoomed-out desktops). */
+    --breakpoint-3xl: 120rem;
 }
 
 /*
@@ -117,6 +119,8 @@
     --sidebar-accent-foreground: #151935;
     --sidebar-border: #d3d8ea;
     --sidebar-ring: #08736c;
+    /* The tinted band behind Install and Downloads; scroll fades blend into it. */
+    --panel-surface: color-mix(in oklch, #ffffff 60%, #f3f5fc);
 }
 
 .dark {
@@ -166,6 +170,7 @@
     --sidebar-accent-foreground: #eceefa;
     --sidebar-border: #2d3360;
     --sidebar-ring: #4fd8c8;
+    --panel-surface: color-mix(in oklch, #181c3a 40%, #10132a);
 }
 
 @layer base {
@@ -205,6 +210,32 @@
 
 section[id] {
   scroll-margin-top: 4.25rem;
+}
+
+/*
+ * Scrollable install and downloads panels (large screens only). Thin scrollbar in the
+ * theme colours; overscroll stays inside the panel so the page does not jump.
+ */
+.scroll-panel {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 45%, transparent) transparent;
+}
+.scroll-panel::-webkit-scrollbar {
+  width: 8px;
+}
+.scroll-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-panel::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.scroll-panel::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--muted-foreground) 65%, transparent);
+  background-clip: padding-box;
 }
 
 /* Hero backdrop: one soft two-colour glow behind the demo (depth, not decoration). */

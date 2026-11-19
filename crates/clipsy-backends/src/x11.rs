@@ -5,7 +5,8 @@
 //! - Clipboard owning: a per-`set_clipboard` thread owns CLIPBOARD and answers SelectionRequests
 //!   (INCR supported on the write side) until ownership is lost.
 //! - Hotkeys: `XGrabKey` on the root window, events read on a dedicated connection.
-//! - Paste: `_NET_ACTIVE_WINDOW` client message, short delay, then Ctrl+V / Ctrl+Shift+V via XTest.
+//! - Paste: `_NET_ACTIVE_WINDOW` client message, wait until that window is active, then
+//!   Ctrl+V / Ctrl+Shift+V via XTest with short gaps between the key events.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::{channel, Sender};
@@ -40,6 +41,19 @@ const STEP_TIMEOUT: Duration = Duration::from_secs(3);
 /// Pause between reading TARGETS and requesting content (see read_clipboard).
 const SETTLE_DELAY: Duration = Duration::from_millis(20);
 const MIME_UTF8: &str = "text/plain;charset=utf-8";
+/// Paste: how long to wait for the remembered window to become active again.
+const FOCUS_TIMEOUT: Duration = Duration::from_millis(500);
+/// Paste: how often to check the active window / held keys while waiting.
+const POLL_EVERY: Duration = Duration::from_millis(10);
+/// Paste: extra pause once the window is active, so it has processed its focus-in.
+const FOCUS_SETTLE: Duration = Duration::from_millis(30);
+/// Paste: how long to wait for the user to let go of Shift/Ctrl/Alt/Super.
+const MODIFIER_TIMEOUT: Duration = Duration::from_millis(300);
+/// Paste: pause between the fake key events. Some terminals (Warp, kitty, VTE under load)
+/// track modifiers from separate state updates and miss a chord sent all at once.
+const KEY_GAP: Duration = Duration::from_millis(8);
+/// Physical V key (evdev and xfree86 keycode), used when no layout has a `v` keysym.
+const KEYCODE_V: u8 = 55;
 const TERMINAL_CLASSES: &[&str] = &[
     "terminal",
     "kitty",
@@ -188,15 +202,39 @@ fn keycode_for_keysym(c: &RustConnection, keysym: u32) -> Result<(u8, u16)> {
     if per == 0 {
         bail!("empty keyboard mapping");
     }
-    // Column 0 is the unshifted level, column 1 the shifted one.
-    for (col, extra) in [(0usize, 0u16), (1, M_SHIFT)] {
-        for (i, syms) in map.keysyms.chunks(per).enumerate() {
+    find_keycode(&map.keysyms, per, min, keysym)
+        .ok_or_else(|| anyhow!("no key produces keysym 0x{keysym:x} on this keyboard layout"))
+}
+
+/// Finds the key that produces `keysym` in a core keyboard mapping (`per` keysyms per key,
+/// first key is `min`). Columns 0/1 are the unshifted/shifted level of the first layout;
+/// later columns belong to the other layouts (for example "us" after "ru"). Apps match
+/// shortcuts like Ctrl+V by physical key in every layout, so a key found there works too.
+fn find_keycode(keysyms: &[u32], per: usize, min: u8, keysym: u32) -> Option<(u8, u16)> {
+    for col in 0..per {
+        let extra = if col % 2 == 1 { M_SHIFT } else { 0 };
+        for (i, syms) in keysyms.chunks(per).enumerate() {
             if syms.get(col) == Some(&keysym) {
-                return Ok((min + i as u8, extra));
+                return Some((min.checked_add(u8::try_from(i).ok()?)?, extra));
             }
         }
     }
-    bail!("no key produces keysym 0x{keysym:x} on this keyboard layout")
+    None
+}
+
+/// Calls `done` every `every` until it returns true or `timeout` has passed.
+/// Returns whether it became true.
+fn wait_until(timeout: Duration, every: Duration, mut done: impl FnMut() -> bool) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if done() {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(every);
+    }
 }
 
 fn keysym_from_name(name: &str) -> Option<(u32, u16)> {
@@ -690,7 +728,49 @@ impl X11Backend {
     fn send_key(&self, press: bool, keycode: u8) -> Result<()> {
         let ty = if press { KEY_PRESS_EVENT } else { KEY_RELEASE_EVENT };
         self.ctl.xtest_fake_input(ty, keycode, 0, NONE, 0, 0, 0)?;
+        self.ctl.flush()?;
+        thread::sleep(KEY_GAP);
         Ok(())
+    }
+
+    /// The window the window manager reports as active right now.
+    fn current_active_window(&self) -> Option<Window> {
+        let reply = self
+            .ctl
+            .get_property(false, self.root, self.ctl_atoms.net_active_window, AtomEnum::WINDOW, 0, 1)
+            .ok()?
+            .reply()
+            .ok()?;
+        reply.value32().and_then(|mut v| v.next()).filter(|&w| w != NONE)
+    }
+
+    /// Asks the window manager to activate `w` and waits until it is active.
+    /// Returns false when it did not become active in time.
+    fn activate_and_wait(&self, w: Window) -> Result<bool> {
+        if self.current_active_window() != Some(w) {
+            // Source 2 ("pager"): the user asked for this, so the window manager's
+            // focus-stealing prevention must not turn it into a "demands attention" hint.
+            let msg = ClientMessageEvent::new(32, w, self.ctl_atoms.net_active_window, [2u32, 0, 0, 0, 0]);
+            self.ctl.send_event(
+                false,
+                self.root,
+                EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
+                msg,
+            )?;
+            self.ctl.flush()?;
+        }
+        let active = wait_until(FOCUS_TIMEOUT, POLL_EVERY, || self.current_active_window() == Some(w));
+        thread::sleep(FOCUS_SETTLE);
+        Ok(active)
+    }
+
+    /// Modifier keys the user is still physically holding (Shift, Ctrl, Alt, Super...).
+    fn held_modifiers(&self) -> u16 {
+        self.ctl
+            .query_pointer(self.root)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+            .map_or(0, |r| u16::from(r.mask) & M_MATCH)
     }
 }
 
@@ -777,29 +857,39 @@ impl Backend for X11Backend {
         let class = win.and_then(|w| source_app(&self.ctl, self.root, w));
         let is_term = mode == PasteMode::Terminal || class.as_deref().is_some_and(is_terminal);
 
-        match win {
-            Some(w) => {
-                let msg = ClientMessageEvent::new(
-                    32,
-                    w,
-                    self.ctl_atoms.net_active_window,
-                    [1u32, 0, 0, 0, 0],
-                );
-                self.ctl.send_event(
-                    false,
-                    self.root,
-                    EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
-                    msg,
-                )?;
-                self.ctl.flush()?;
+        // Keys are only sent once the remembered window is really active again: before
+        // that they would go to the popup (still unmapping) or to whatever window the
+        // window manager focused in between.
+        let focused = match win {
+            Some(w) => self.activate_and_wait(w)?,
+            None => {
+                tracing::warn!("x11 paste: no remembered window, sending keys to the focused one");
+                true
             }
-            None => tracing::warn!("x11 paste: no remembered window, sending keys to the focused one"),
+        };
+        if !focused {
+            tracing::warn!("x11 paste: window {:?} did not become active in time, pasting anyway", win);
         }
-        thread::sleep(Duration::from_millis(60));
+        // A key the user still holds (Shift from Shift+Enter, Ctrl from Ctrl+1) would be
+        // added to our chord, so wait briefly for it to be released.
+        let held_before = self.held_modifiers();
+        if held_before != 0 {
+            wait_until(MODIFIER_TIMEOUT, POLL_EVERY, || self.held_modifiers() == 0);
+        }
 
         let (ctrl, _) = keycode_for_keysym(&self.ctl, 0xffe3)?; // Control_L
         let (shift, _) = keycode_for_keysym(&self.ctl, 0xffe1)?; // Shift_L
-        let (v, _) = keycode_for_keysym(&self.ctl, 'v' as u32)?;
+        let v = match keycode_for_keysym(&self.ctl, 'v' as u32) {
+            Ok((v, _)) => v,
+            Err(_) => KEYCODE_V,
+        };
+
+        tracing::info!(
+            "x11 paste: window={} class={:?} terminal={is_term} focused={focused} held_mods=0x{held_before:x} keys={}",
+            win.map_or_else(|| "none".to_string(), |w| format!("0x{w:x}")),
+            class.as_deref().unwrap_or("?"),
+            if is_term { "Ctrl+Shift+V" } else { "Ctrl+V" },
+        );
 
         if is_term {
             self.send_key(true, shift)?;
@@ -811,7 +901,6 @@ impl Backend for X11Backend {
         if is_term {
             self.send_key(false, shift)?;
         }
-        self.ctl.flush()?;
         Ok(())
     }
 
@@ -929,6 +1018,53 @@ mod tests {
         assert!(parse_accel("NoSuchKey").is_err());
         assert!(parse_accel("<Super>vv").is_err());
         assert!(parse_accel("<Super>F13").is_err());
+    }
+
+    #[test]
+    fn find_keycode_prefers_first_layout_and_reports_shift() {
+        // 2 keysyms per key, keys 8..=10: [a A] [v V] [b B]
+        let map = [0x61, 0x41, 0x76, 0x56, 0x62, 0x42];
+        assert_eq!(find_keycode(&map, 2, 8, 0x76), Some((9, 0)));
+        assert_eq!(find_keycode(&map, 2, 8, 0x56), Some((9, M_SHIFT)));
+        assert_eq!(find_keycode(&map, 2, 8, 0x7a), None);
+    }
+
+    #[test]
+    fn find_keycode_falls_back_to_other_layouts() {
+        // "ru,us": 4 keysyms per key, Cyrillic first; v only exists in the second layout.
+        const CYRILLIC_EM: u32 = 0x6cd;
+        const CYRILLIC_EM_CAP: u32 = 0x6ed;
+        let map = [0x6c6, 0x6e6, 0x61, 0x41, CYRILLIC_EM, CYRILLIC_EM_CAP, 0x76, 0x56];
+        assert_eq!(find_keycode(&map, 4, 54, 0x76), Some((55, 0)));
+        assert_eq!(find_keycode(&map, 4, 54, 0x56), Some((55, M_SHIFT)));
+    }
+
+    #[test]
+    fn find_keycode_does_not_overflow_keycodes() {
+        let map = vec![0u32; 300];
+        assert_eq!(find_keycode(&map, 1, 8, 0x76), None);
+        let mut map = vec![0u32; 300];
+        map[299] = 0x76;
+        assert_eq!(find_keycode(&map, 1, 8, 0x76), None);
+    }
+
+    #[test]
+    fn wait_until_returns_as_soon_as_done() {
+        let mut calls = 0;
+        let start = Instant::now();
+        assert!(wait_until(Duration::from_secs(5), Duration::from_millis(1), || {
+            calls += 1;
+            calls == 3
+        }));
+        assert_eq!(calls, 3);
+        assert!(start.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn wait_until_gives_up_after_timeout() {
+        let start = Instant::now();
+        assert!(!wait_until(Duration::from_millis(30), Duration::from_millis(5), || false));
+        assert!(start.elapsed() >= Duration::from_millis(30));
     }
 
     #[test]

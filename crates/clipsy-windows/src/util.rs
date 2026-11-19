@@ -62,9 +62,50 @@ fn hex_value(b: u8) -> u8 {
     }
 }
 
+/// Takes at most `max` messages that are ready on `rx` right now, without waiting. Stops early
+/// when the channel is empty or disconnected.
+pub fn drain_up_to<T>(rx: &std::sync::mpsc::Receiver<T>, max: usize) -> Vec<T> {
+    let mut items = Vec::new();
+    while items.len() < max {
+        match rx.try_recv() {
+            Ok(item) => items.push(item),
+            Err(_) => break,
+        }
+    }
+    items
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drain_up_to_stops_at_max() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        for i in 0..10 {
+            tx.send(i).unwrap();
+        }
+        assert_eq!(drain_up_to(&rx, 4), vec![0, 1, 2, 3]);
+        assert_eq!(drain_up_to(&rx, 100), vec![4, 5, 6, 7, 8, 9]);
+    }
+
+    #[test]
+    fn drain_up_to_returns_all_when_fewer() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send("a").unwrap();
+        tx.send("b").unwrap();
+        assert_eq!(drain_up_to(&rx, 16), vec!["a", "b"]);
+        assert!(drain_up_to(&rx, 16).is_empty());
+    }
+
+    #[test]
+    fn drain_up_to_handles_disconnected_channel() {
+        let (tx, rx) = std::sync::mpsc::channel::<u8>();
+        tx.send(7).unwrap();
+        drop(tx);
+        assert_eq!(drain_up_to(&rx, 16), vec![7]);
+        assert!(drain_up_to(&rx, 16).is_empty());
+    }
 
     #[test]
     fn dword_zero_is_true() {

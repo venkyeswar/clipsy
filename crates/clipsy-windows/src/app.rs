@@ -22,11 +22,18 @@ use crate::popup::Popup;
 use crate::settings::SettingsWindow;
 use crate::single_instance::{self, Role, Verb};
 use crate::tray::Tray;
+use crate::util::drain_up_to;
 
 /// How often the UI thread drains the message channels.
 const PUMP_EVERY: Duration = Duration::from_millis(50);
 /// How often expired items are deleted while the app runs (also done once at start).
 const PRUNE_EVERY: Duration = Duration::from_secs(60 * 60);
+/// Most clipboard events stored in one tick. The rest wait for the next tick, so a burst of
+/// copies cannot keep the UI thread busy.
+const MAX_CLIPS_PER_TICK: usize = 32;
+/// Most hotkey presses and verbs handled in one tick.
+const MAX_HOTKEYS_PER_TICK: usize = 16;
+const MAX_VERBS_PER_TICK: usize = 16;
 
 const USAGE: &str = "Clipsy for Windows - clipboard history
 
@@ -181,10 +188,12 @@ pub fn run(args: Vec<String>) -> Result<()> {
     Ok(())
 }
 
-/// Turns on start at login when the config asks for it and the Run key is missing (for
-/// example after the exe moved). Failures are logged; they do not stop the app.
+/// Writes the Run value for start at login when the config asks for it. The value is rewritten
+/// on every start, so it names the exe that is running now (it goes stale after the exe moves).
+/// Failures are logged; they do not stop the app. When the config says off, the registry is
+/// left alone.
 fn apply_autostart(config: &Config) {
-    if !config.general.autostart || autostart::is_enabled() {
+    if !config.general.autostart {
         return;
     }
     let result = std::env::current_exe()
@@ -216,57 +225,58 @@ struct App {
 }
 
 impl App {
-    /// One pass of the message pump. Runs on the UI thread every `PUMP_EVERY`.
+    /// One pass of the message pump. Runs on the UI thread every `PUMP_EVERY`. Each channel is
+    /// drained up to a cap, so a burst is spread over several ticks.
     fn tick(&self) {
         // Menu clicks reach `verbs` from here, so the tray must be polled before draining.
         self.tray.poll();
-        while let Ok(event) = self.inbox.clips.try_recv() {
-            self.on_clip(&event);
+
+        let clips = drain_up_to(&self.inbox.clips, MAX_CLIPS_PER_TICK);
+        if self.store_clips(&clips) {
+            // One prune and one popup refresh for the whole batch, not one per clip.
+            if let Err(e) = self.run_prune() {
+                tracing::warn!("could not prune history: {e:#}");
+            }
+            self.popup.refresh();
         }
-        while let Ok(action) = self.inbox.hotkeys.try_recv() {
+
+        for action in drain_up_to(&self.inbox.hotkeys, MAX_HOTKEYS_PER_TICK) {
             self.on_hotkey(action);
         }
-        while let Ok(verb) = self.inbox.verbs.try_recv() {
+        for verb in drain_up_to(&self.inbox.verbs, MAX_VERBS_PER_TICK) {
             self.on_verb(verb);
         }
     }
 
-    /// A new clipboard item arrived from the backend. Dropped while paused.
-    fn on_clip(&self, event: &ClipEvent) {
-        if self.config.borrow().privacy.paused {
-            return;
+    /// Stores the new clipboard items from the backend. Returns true when at least one was
+    /// stored. Nothing is stored while paused.
+    fn store_clips(&self, events: &[ClipEvent]) -> bool {
+        if events.is_empty() || self.config.borrow().privacy.paused {
+            return false;
         }
-        let stored = {
-            let cfg = self.config.borrow();
-            let mut store = self.store.borrow_mut();
+        let cfg = self.config.borrow();
+        let mut store = self.store.borrow_mut();
+        let mut stored = false;
+        for event in events {
             match store.insert_event(event, &cfg) {
-                Ok(Some(_)) => {
-                    if let Err(e) = store.prune(&cfg) {
-                        tracing::warn!("could not prune history: {e:#}");
-                    }
-                    true
-                }
+                Ok(Some(_)) => stored = true,
                 // Ignored on purpose (duplicate, whitespace only, sensitive, ...).
-                Ok(None) => false,
-                Err(e) => {
-                    tracing::warn!("could not save a clipboard item: {e:#}");
-                    false
-                }
+                Ok(None) => {}
+                Err(e) => tracing::warn!("could not save a clipboard item: {e:#}"),
             }
-        };
-        if stored {
-            self.popup.refresh();
         }
+        stored
     }
 
-    /// Deletes expired items and refreshes the popup if anything went.
+    /// Deletes expired items. Returns how many were deleted.
+    fn run_prune(&self) -> Result<usize> {
+        let cfg = self.config.borrow();
+        self.store.borrow_mut().prune(&cfg)
+    }
+
+    /// Hourly and at start: deletes expired items and refreshes the popup if anything went.
     fn prune(&self) {
-        // The result is taken out of the store borrow first: `refresh` borrows the store too.
-        let pruned = {
-            let cfg = self.config.borrow();
-            self.store.borrow_mut().prune(&cfg)
-        };
-        match pruned {
+        match self.run_prune() {
             Ok(0) => {}
             Ok(_) => self.popup.refresh(),
             Err(e) => tracing::warn!("could not clean up history: {e:#}"),

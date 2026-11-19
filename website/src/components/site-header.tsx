@@ -1,14 +1,7 @@
 import { useEffect, useState } from "react";
-import { Download, Menu, Monitor, Moon, Sun } from "lucide-react";
+import { Download, Menu, Moon, Sun } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetClose,
@@ -19,7 +12,7 @@ import {
 } from "@/components/ui/sheet";
 import { config } from "@/config";
 import { PAGE_CONTAINER } from "@/lib/layout";
-import { useTheme, type Theme } from "@/components/theme-provider";
+import { useTheme } from "@/components/theme-provider";
 import { useReleases } from "@/hooks/use-releases";
 import { useSelectedPlatform } from "@/lib/platform-context";
 import { latestStable, latestWithWindows } from "@/lib/releases";
@@ -36,52 +29,34 @@ const trackedSectionIds = ["install", "downloads", "features", "shortcuts", "hel
 
 const githubUrl = `https://github.com/${config.repo}`;
 
-const themeIcon = {
-  light: Sun,
-  dark: Moon,
-  system: Monitor,
-} satisfies Record<Theme, typeof Sun>;
-
 function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  const Icon = themeIcon[theme];
+  const { resolvedTheme, toggleTheme } = useTheme();
+  // Icon shows the theme you would switch to: Sun while dark, Moon while light.
+  const Icon = resolvedTheme === "dark" ? Sun : Moon;
+  const label = resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme";
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-11"
-            aria-label={`Theme: ${theme}. Change theme`}
-          />
-        }
-      >
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.span
-            key={theme}
-            initial={{ rotate: -90, scale: 0.5, opacity: 0 }}
-            animate={{ rotate: 0, scale: 1, opacity: 1 }}
-            exit={{ rotate: 90, scale: 0.5, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 400, damping: 26 }}
-            className="inline-flex"
-          >
-            <Icon aria-hidden="true" className="size-4" />
-          </motion.span>
-        </AnimatePresence>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuRadioGroup
-          value={theme}
-          onValueChange={(value) => setTheme(value as Theme)}
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-11"
+      aria-label={label}
+      title={label}
+      onClick={toggleTheme}
+    >
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={resolvedTheme}
+          initial={{ rotate: -90, scale: 0.5, opacity: 0 }}
+          animate={{ rotate: 0, scale: 1, opacity: 1 }}
+          exit={{ rotate: 90, scale: 0.5, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 400, damping: 26 }}
+          className="inline-flex"
         >
-          <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <Icon aria-hidden="true" className="size-4" />
+        </motion.span>
+      </AnimatePresence>
+    </Button>
   );
 }
 

@@ -36,6 +36,18 @@ class FakeIntersectionObserver {
   }
 }
 
+function mockOsScheme(dark: boolean) {
+  vi.spyOn(window, "matchMedia").mockImplementation(
+    (query: string) =>
+      ({
+        matches: query === "(prefers-color-scheme: dark)" && dark,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList,
+  );
+}
+
 function renderHeader(platform: "linux" | "windows" = "linux") {
   return renderWithPlatform(
     <ThemeProvider>
@@ -55,6 +67,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  document.documentElement.classList.remove("dark");
 });
 
 it("download_button_points_at_the_deb_on_linux", () => {
@@ -101,4 +115,32 @@ it("closes_mobile_menu_when_link_clicked", async () => {
 
   await userEvent.click(within(dialog).getByRole("link", { name: "Help" }));
   await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+});
+
+it("theme_button_describes_the_switch_and_toggles_in_place", async () => {
+  mockOsScheme(false);
+  renderHeader();
+
+  const toggle = screen.getByRole("button", { name: "Switch to dark theme" });
+  expect(toggle).toHaveAttribute("title", "Switch to dark theme");
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+  await userEvent.click(toggle);
+  expect(window.localStorage.getItem("clipsy-theme")).toBe("dark");
+  expect(document.documentElement).toHaveClass("dark");
+
+  const back = screen.getByRole("button", { name: "Switch to light theme" });
+  expect(back).toHaveAttribute("title", "Switch to light theme");
+  await userEvent.click(back);
+  expect(window.localStorage.getItem("clipsy-theme")).toBe("light");
+  expect(document.documentElement).not.toHaveClass("dark");
+});
+
+it("theme_button_has_no_system_option", async () => {
+  mockOsScheme(true);
+  renderHeader();
+
+  await userEvent.click(screen.getByRole("button", { name: "Switch to light theme" }));
+  expect(screen.queryByRole("menuitemradio", { name: "System" })).not.toBeInTheDocument();
+  expect(screen.queryByText("System")).not.toBeInTheDocument();
 });

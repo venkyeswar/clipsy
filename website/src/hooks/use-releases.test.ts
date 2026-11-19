@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { loadReleases, resetReleasesRequests, useReleases } from "./use-releases";
+import { loadReleases, readFreshCache, resetReleasesRequests, useReleases } from "./use-releases";
 
 // The hook test relies on an empty bundled snapshot.
 vi.mock("../data/releases.snapshot.json", () => ({ default: [] }));
 
 const KEY = "clipsy-releases-v1";
 const NOW = 1_700_000_000_000;
-const TEN_MINUTES = 10 * 60 * 1000;
+const FIVE_MINUTES = 5 * 60 * 1000;
 
 const rawRelease = (tag: string) => ({
   tag_name: tag,
@@ -85,27 +85,53 @@ describe("loadReleases", () => {
     expect(result).toEqual({ releases: [], status: "empty" });
   });
 
-  it("uses_fresh_cache_without_fetching", async () => {
+  it("always_revalidates_fresh_cache_and_live_result_wins", async () => {
     const fetchImpl = fakeFetch(200, [rawRelease("v9.9.9")]);
     const storage = memoryStorage({
       [KEY]: JSON.stringify({ t: NOW - 60_000, data: [rawRelease("v0.2.0")] }),
     });
     const result = await loadReleases(fetchImpl, storage, () => NOW, SNAPSHOT);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe("live");
+    expect(result.releases.map((r) => r.version)).toEqual(["9.9.9"]);
+  });
+
+  it("falls_back_to_fresh_cache_when_request_fails", async () => {
+    const storage = memoryStorage({
+      [KEY]: JSON.stringify({ t: NOW - 60_000, data: [rawRelease("v0.2.0")] }),
+    });
+    const result = await loadReleases(fakeFetch(403, {}), storage, () => NOW, SNAPSHOT);
     expect(result.status).toBe("live");
     expect(result.releases.map((r) => r.version)).toEqual(["0.2.0"]);
-    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("ignores_stale_cache_and_refetches", async () => {
     const fetchImpl = fakeFetch(200, [rawRelease("v0.3.0")]);
     const storage = memoryStorage({
-      [KEY]: JSON.stringify({ t: NOW - TEN_MINUTES - 1, data: [rawRelease("v0.2.0")] }),
+      [KEY]: JSON.stringify({ t: NOW - FIVE_MINUTES - 1, data: [rawRelease("v0.2.0")] }),
     });
     const result = await loadReleases(fetchImpl, storage, () => NOW, SNAPSHOT);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(result.status).toBe("live");
     expect(result.releases.map((r) => r.version)).toEqual(["0.3.0"]);
     expect(JSON.parse(storage.data.get(KEY) ?? "{}").t).toBe(NOW);
+  });
+
+  it("stale_cache_is_not_used_when_request_fails", async () => {
+    const storage = memoryStorage({
+      [KEY]: JSON.stringify({ t: NOW - FIVE_MINUTES - 1, data: [rawRelease("v0.2.0")] }),
+    });
+    const result = await loadReleases(fakeFetch(403, {}), storage, () => NOW, SNAPSHOT);
+    expect(result.status).toBe("snapshot");
+    expect(result.releases.map((r) => r.version)).toEqual(["0.1.0"]);
+  });
+
+  it("readFreshCache_honours_the_five_minute_ttl", () => {
+    const data = [rawRelease("v0.2.0")];
+    const at = (age: number) => memoryStorage({ [KEY]: JSON.stringify({ t: NOW - age, data }) });
+    expect(readFreshCache(at(FIVE_MINUTES - 1), () => NOW)?.[0].version).toBe("0.2.0");
+    expect(readFreshCache(at(FIVE_MINUTES), () => NOW)).toBeNull();
+    expect(readFreshCache(memoryStorage(), () => NOW)).toBeNull();
   });
 
   it("survives_throwing_sessionStorage", async () => {
@@ -166,15 +192,26 @@ describe("shared release request", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("successful_result_is_cached_for_later_mounts", async () => {
+  it("later_mount_paints_cache_then_revalidates", async () => {
     const fetchMock = fakeFetch(200, [rawRelease("v0.3.0")]);
     vi.stubGlobal("fetch", fetchMock);
     const first = renderHook(() => useReleases());
     await waitFor(() => expect(first.result.current.status).toBe("live"));
     first.unmount();
     const later = renderHook(() => useReleases());
+    // The recent cache is shown straight away, before the background request finishes.
+    expect(later.result.current.releases.map((r) => r.version)).toEqual(["0.3.0"]);
     await waitFor(() => expect(later.result.current.status).toBe("live"));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("live_result_replaces_the_cached_list", async () => {
+    window.sessionStorage.setItem(KEY, JSON.stringify({ t: Date.now(), data: [rawRelease("v0.2.0")] }));
+    vi.stubGlobal("fetch", fakeFetch(200, [rawRelease("v0.3.0")]));
+    const { result } = renderHook(() => useReleases());
+    expect(result.current.releases.map((r) => r.version)).toEqual(["0.2.0"]);
+    await waitFor(() => expect(result.current.releases.map((r) => r.version)).toEqual(["0.3.0"]));
+    expect(result.current.status).toBe("live");
   });
 
   it("failed_fetch_is_not_retried_within_the_negative_window", async () => {

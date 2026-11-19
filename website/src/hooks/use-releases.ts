@@ -7,7 +7,8 @@ export type ReleasesStatus = "loading" | "live" | "snapshot" | "empty";
 export type ReleasesState = { releases: Release[]; status: ReleasesStatus };
 
 const CACHE_KEY = "clipsy-releases-v1";
-const CACHE_TTL_MS = 10 * 60 * 1000;
+/** Short on purpose: a cached list is only a first paint or a fallback, never the final answer. */
+const CACHE_TTL_MS = 5 * 60 * 1000;
 const RELEASES_URL = `https://api.github.com/repos/${config.repo}/releases`;
 
 type StorageLike = {
@@ -55,9 +56,20 @@ function writeCache(storage: StorageLike, data: unknown[], now: () => number) {
   }
 }
 
+/** A recent live list from sessionStorage (under CACHE_TTL_MS old), or null. Never throws. */
+export function readFreshCache(
+  storage: StorageLike = safeSessionStorage,
+  now: () => number = Date.now,
+): Release[] | null {
+  const data = readCache(storage, now);
+  if (!data) return null;
+  const releases = parseReleases(data);
+  return releases.length > 0 ? releases : null;
+}
+
 /**
- * Resolves the release list: fresh sessionStorage cache, then the GitHub API,
- * then the bundled snapshot. Never throws.
+ * Always asks GitHub for the live list. The result replaces anything shown before.
+ * If the request fails, a fresh cached list is used; otherwise the bundled snapshot. Never throws.
  */
 export async function loadReleases(
   fetchImpl: typeof fetch = fetch,
@@ -72,13 +84,10 @@ export async function loadReleases(
       ? { releases, status: "snapshot" as const }
       : { releases, status: "empty" as const };
   };
-
-  const cached = readCache(storage, now);
-  if (cached) {
-    const releases = parseReleases(cached);
-    if (releases.length > 0) return { releases, status: "live" };
-    return fromSnapshot();
-  }
+  const fallback = () => {
+    const cached = readFreshCache(storage, now);
+    return cached ? { releases: cached, status: "live" as const } : fromSnapshot();
+  };
 
   let body: unknown;
   try {
@@ -86,12 +95,12 @@ export async function loadReleases(
       headers: { Accept: "application/vnd.github+json" },
       signal,
     });
-    if (!res.ok) return fromSnapshot();
+    if (!res.ok) return fallback();
     body = await res.json();
   } catch {
-    return fromSnapshot();
+    return fallback();
   }
-  if (!Array.isArray(body)) return fromSnapshot();
+  if (!Array.isArray(body)) return fallback();
 
   writeCache(storage, body, now);
   const releases = parseReleases(body);
@@ -123,7 +132,7 @@ export function requestReleases(): Promise<LoadResult> {
 
   const recentlyFailed = failedAt !== null && Date.now() - failedAt < NEGATIVE_TTL_MS;
   let requestFailed = false;
-  // A recent failure still reads the fresh sessionStorage cache, but never calls the network.
+  // A recent failure still uses the fresh sessionStorage cache as fallback, but never calls the network.
   const fetchImpl: typeof fetch = recentlyFailed
     ? () => Promise.reject(new Error("GitHub request failed recently"))
     : async (input, init) => {
@@ -149,7 +158,11 @@ export function requestReleases(): Promise<LoadResult> {
 }
 
 export function useReleases(): ReleasesState {
-  const [state, setState] = useState<ReleasesState>({ releases: [], status: "loading" });
+  // Paint the recent cache at once, then always replace it with the live result.
+  const [state, setState] = useState<ReleasesState>(() => {
+    const cached = readFreshCache();
+    return cached ? { releases: cached, status: "live" } : { releases: [], status: "loading" };
+  });
 
   useEffect(() => {
     let active = true;

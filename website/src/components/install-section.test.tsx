@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { InstallSection } from "./install-section";
 import { useReleases } from "@/hooks/use-releases";
@@ -51,4 +52,37 @@ it("hides_snap_tab_when_channel_null", () => {
     "Build from source",
   ]);
   expect(screen.queryByRole("link", { name: "Open in App Center" })).not.toBeInTheDocument();
+});
+
+it("deb_tab_shows_releases_button_when_no_deb", async () => {
+  mockedUseReleases.mockReturnValue({ releases: [{ ...release, deb: undefined }], status: "live" });
+  render(<InstallSection />);
+  await userEvent.click(screen.getByRole("tab", { name: ".deb package" }));
+  expect(screen.getByRole("link", { name: "View releases on GitHub" })).toHaveAttribute(
+    "href",
+    "https://github.com/venkyeswar/clipsy/releases",
+  );
+  expect(screen.queryByText(/^wget /)).not.toBeInTheDocument();
+});
+
+it("nosudo_tab_shows_releases_button_when_no_tarball", async () => {
+  mockedUseReleases.mockReturnValue({ releases: [{ ...release, tarball: undefined }], status: "live" });
+  render(<InstallSection />);
+  await userEvent.click(screen.getByRole("tab", { name: "No sudo" }));
+  expect(screen.getByRole("link", { name: "View releases on GitHub" })).toBeInTheDocument();
+  expect(screen.queryByText(/^wget /)).not.toBeInTheDocument();
+  expect(screen.queryByText(/tar -xzf/)).not.toBeInTheDocument();
+});
+
+it("shows_skeleton_not_fallback_while_loading", async () => {
+  mockedUseReleases.mockReturnValue({ releases: [], status: "loading" });
+  const { container } = render(<InstallSection />);
+  await userEvent.click(screen.getByRole("tab", { name: ".deb package" }));
+  expect(screen.queryByText(/No .deb package is published/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "View releases on GitHub" })).not.toBeInTheDocument();
+  expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("tab", { name: "No sudo" }));
+  expect(screen.queryByText(/No no-sudo package/)).not.toBeInTheDocument();
+  expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
 });

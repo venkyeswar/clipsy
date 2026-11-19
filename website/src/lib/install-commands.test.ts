@@ -49,12 +49,16 @@ it("deb_tab_falls_back_without_release", () => {
 });
 
 it("nosudo_uses_release_version_in_filename", () => {
-  expect(tab("nosudo", installCommands("edge", { ...release, tarball: undefined })).commands).toContain(
-    "tar -xzf clipsy-0.4.0-linux-x86_64.tar.gz",
-  );
-  expect(tab("nosudo", installCommands("edge", undefined)).commands).toContain(
-    "tar -xzf clipsy-<version>-linux-x86_64.tar.gz",
-  );
+  expect(tab("nosudo").commands).toContain("tar -xzf clipsy-0.4.0-linux-x86_64.tar.gz");
+});
+
+it("nosudo_has_no_commands_without_tarball", () => {
+  for (const current of [undefined, { ...release, tarball: undefined }]) {
+    const nosudo = tab("nosudo", installCommands("edge", current));
+    expect(nosudo.commands).toEqual([]);
+    expect(nosudo.note).toContain("GitHub releases page");
+    expect(nosudo.note).not.toContain("https://");
+  }
 });
 
 it("deb_tab_uses_release_asset_url_and_name", () => {

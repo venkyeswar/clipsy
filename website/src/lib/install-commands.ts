@@ -47,21 +47,25 @@ export function installCommands(
     commands: deb ? [`wget ${deb.url}`, `sudo apt install ./${deb.name}`] : [],
   });
 
-  const version = release?.version ?? "<version>";
   const tarball = release?.tarball;
-  const tarballName = tarball?.name ?? `clipsy-${version}-linux-x86_64${TARBALL_SUFFIX}`;
-  const folder = tarballName.endsWith(TARBALL_SUFFIX)
-    ? tarballName.slice(0, -TARBALL_SUFFIX.length)
-    : tarballName;
-  const download = tarball
-    ? `wget ${tarball.url}`
-    : `wget ${releasesUrl()}/download/v${version}/${tarballName}`;
-  tabs.push({
-    id: "nosudo",
-    title: "No sudo",
-    note: `Installs into your home folder, so it needs no sudo. GTK4 and libadwaita must already be installed, which they are on Ubuntu 24.04 GNOME. To remove it later, run ${NOSUDO_UNINSTALL_COMMAND} from the same folder.`,
-    commands: [download, `tar -xzf ${tarballName}`, `cd ${folder}`, "./install.sh"],
-  });
+  if (tarball) {
+    const folder = tarball.name.endsWith(TARBALL_SUFFIX)
+      ? tarball.name.slice(0, -TARBALL_SUFFIX.length)
+      : tarball.name;
+    tabs.push({
+      id: "nosudo",
+      title: "No sudo",
+      note: `Installs into your home folder, so it needs no sudo. GTK4 and libadwaita must already be installed, which they are on Ubuntu 24.04 GNOME. To remove it later, run ${NOSUDO_UNINSTALL_COMMAND} from the same folder.`,
+      commands: [`wget ${tarball.url}`, `tar -xzf ${tarball.name}`, `cd ${folder}`, "./install.sh"],
+    });
+  } else {
+    tabs.push({
+      id: "nosudo",
+      title: "No sudo",
+      note: "No no-sudo package is published for the latest release yet. Find it on the GitHub releases page.",
+      commands: [],
+    });
+  }
 
   tabs.push({
     id: "source",

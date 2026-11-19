@@ -9,11 +9,11 @@ pub fn validate_hotkey(s: &str) -> Result<(), String> {
 }
 
 /// Splits a comma-separated settings field into items: trims each, drops empty
-/// ones and removes repeats, keeping the first occurrence's position.
+/// ones and removes repeats (ignoring case), keeping the first spelling and position.
 pub fn parse_list(s: &str) -> Vec<String> {
     let mut items: Vec<String> = Vec::new();
     for part in s.split(',').map(str::trim).filter(|p| !p.is_empty()) {
-        if !items.iter().any(|existing| existing == part) {
+        if !items.iter().any(|existing| existing.eq_ignore_ascii_case(part)) {
             items.push(part.to_string());
         }
     }
@@ -34,6 +34,23 @@ pub fn clamp_u32(s: &str, min: u32, max: u32, fallback: u32) -> u32 {
     }
 }
 
+/// Maps the theme field to an allowed value (`system`, `light` or `dark`). Anything else is `system`.
+pub fn normalize_theme(s: &str) -> &'static str {
+    match s.trim() {
+        "light" => "light",
+        "dark" => "dark",
+        _ => "system",
+    }
+}
+
+/// Maps the popup position field to an allowed value (`cursor` or `center`). Anything else is `cursor`.
+pub fn normalize_position(s: &str) -> &'static str {
+    match s.trim() {
+        "center" => "center",
+        _ => "cursor",
+    }
+}
+
 #[cfg(windows)]
 pub use window::SettingsWindow;
 
@@ -47,12 +64,12 @@ mod window {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use anyhow::Result;
+    use anyhow::{anyhow, Result};
     use clipsy_backends::Backend;
     use clipsy_core::config::Config;
     use slint::ComponentHandle;
 
-    use super::{clamp_u32, join_list, parse_list, validate_hotkey};
+    use super::{clamp_u32, join_list, normalize_position, normalize_theme, parse_list, validate_hotkey};
     use crate::autostart;
     use crate::backend::WindowsBackend;
     use crate::ui::SettingsDialog;
@@ -99,9 +116,14 @@ mod window {
                     return;
                 }
                 match save(&dialog, &shared, &backend) {
-                    Ok(()) => {
+                    Ok(Saved::Done) => {
                         on_saved();
                         hide(&dialog);
+                    }
+                    Ok(Saved::Warning(message)) => {
+                        // The settings were saved, so the app must reload them; the window stays open.
+                        on_saved();
+                        dialog.set_save_error(message.into());
                     }
                     Err(e) => dialog.set_save_error(format!("{e:#}").into()),
                 }
@@ -160,10 +182,20 @@ mod window {
         dialog.set_save_error("".into());
     }
 
-    /// Reads the form, applies it and saves it. On error the shared config and the
-    /// hotkey binding are left as they were, except that autostart may already be
-    /// changed if it failed last.
-    fn save(dialog: &SettingsDialog, shared: &RefCell<Config>, backend: &WindowsBackend) -> Result<()> {
+    /// How a save ended. `Done` closes the window; `Warning` keeps it open with a message
+    /// because the settings were saved but one step (sign-in launch) failed.
+    enum Saved {
+        Done,
+        Warning(String),
+    }
+
+    /// Reads the form, applies it and saves it. On `Err` the shared config and the
+    /// hotkey binding are left as they were.
+    fn save(
+        dialog: &SettingsDialog,
+        shared: &RefCell<Config>,
+        backend: &WindowsBackend,
+    ) -> Result<Saved> {
         let prev = shared.borrow().clone();
         let mut next = prev.clone();
 
@@ -191,8 +223,8 @@ mod window {
         next.general.save_files = dialog.get_save_files();
         next.general.terminal_apps = parse_list(dialog.get_terminal_apps().as_str());
 
-        next.appearance.theme = dialog.get_theme().to_string();
-        next.appearance.popup_position = dialog.get_popup_position().to_string();
+        next.appearance.theme = normalize_theme(dialog.get_theme().as_str()).to_string();
+        next.appearance.popup_position = normalize_position(dialog.get_popup_position().as_str()).to_string();
         next.appearance.compact = dialog.get_compact();
         next.appearance.show_source_app = dialog.get_show_source_app();
 
@@ -209,17 +241,40 @@ mod window {
             backend.rebind_toggle(&next.shortcuts.toggle_popup)?;
         }
         if let Err(e) = next.save() {
+            let mut message = format!("{e:#}");
             if hotkey_changed {
                 if let Err(restore) = backend.rebind_toggle(&prev.shortcuts.toggle_popup) {
-                    tracing::warn!(error = %restore, "could not restore the previous popup shortcut");
+                    message = format!(
+                        "{message}. The previous shortcut {} could not be restored either: {restore:#}",
+                        prev.shortcuts.toggle_popup
+                    );
                 }
             }
-            return Err(e);
+            return Err(anyhow!("{message}"));
         }
         *shared.borrow_mut() = next.clone();
         backend.set_terminal_apps(&next.general.terminal_apps);
 
-        autostart::set_enabled(&std::env::current_exe()?, next.general.autostart)
+        // The config is saved at this point. If the sign-in entry fails, keep everything
+        // else and record what the registry really holds, so the form tells the truth.
+        match autostart::set_enabled(&std::env::current_exe()?, next.general.autostart) {
+            Ok(()) => Ok(Saved::Done),
+            Err(autostart_error) => {
+                next.general.autostart = autostart::is_enabled();
+                dialog.set_autostart(next.general.autostart);
+                let mut message = format!(
+                    "Settings saved, but launching Clipsy at sign-in failed: {autostart_error:#}"
+                );
+                match next.save() {
+                    Ok(()) => *shared.borrow_mut() = next,
+                    Err(e) => {
+                        *shared.borrow_mut() = next;
+                        message = format!("{message}. The settings file could not be updated: {e:#}");
+                    }
+                }
+                Ok(Saved::Warning(message))
+            }
+        }
     }
 }
 
@@ -243,6 +298,28 @@ mod tests {
         assert_eq!(parse_list(" Code , ,my-term,Code,,  KeePassXC "), ["Code", "my-term", "KeePassXC"]);
         assert!(parse_list("").is_empty());
         assert!(parse_list(" , ,").is_empty());
+    }
+
+    #[test]
+    fn parse_list_dedupes_case_insensitively() {
+        assert_eq!(parse_list("Code, code, CODE, my-term"), ["Code", "my-term"]);
+    }
+
+    #[test]
+    fn normalize_theme_accepts_known_and_defaults() {
+        assert_eq!(normalize_theme("light"), "light");
+        assert_eq!(normalize_theme(" dark "), "dark");
+        assert_eq!(normalize_theme("system"), "system");
+        assert_eq!(normalize_theme("purple"), "system");
+        assert_eq!(normalize_theme(""), "system");
+    }
+
+    #[test]
+    fn normalize_position_accepts_known_and_defaults() {
+        assert_eq!(normalize_position("center"), "center");
+        assert_eq!(normalize_position(" cursor"), "cursor");
+        assert_eq!(normalize_position("top-left"), "cursor");
+        assert_eq!(normalize_position(""), "cursor");
     }
 
     #[test]

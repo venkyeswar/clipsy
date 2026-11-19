@@ -2,7 +2,7 @@
 // window is shown, reads them back on Save, and checks the shortcut as it is typed
 // (`shortcut-edited`). Nothing here saves anything by itself.
 
-import { Button, CheckBox, ComboBox, GroupBox, LineEdit, ScrollView } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox, GroupBox, LineEdit, Palette, ScrollView } from "std-widgets.slint";
 
 // A labelled text field. The label sits on the left, the field fills the rest.
 component Field inherits HorizontalLayout {
@@ -62,8 +62,9 @@ export component SettingsDialog inherits Window {
     callback save-requested();
     callback cancel-requested();
 
-    property <color> error-color: #c01c28;
-    property <color> muted-color: #5f6368;
+    // Colours follow the system palette so both light and dark mode stay readable.
+    property <color> error-color: Palette.color-scheme == ColorScheme.dark ? #ff8a75 : #c01c28;
+    property <color> muted-color: Palette.alternate-foreground;
 
     VerticalLayout {
         padding: 16px;

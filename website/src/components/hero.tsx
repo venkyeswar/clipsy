@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PopupDemo } from "@/components/popup-demo";
+import { Tilt } from "@/components/tilt";
 import { config, shortcutFor } from "@/config";
 import { useReleases } from "@/hooks/use-releases";
 import { useSelectedPlatform } from "@/lib/platform-context";
@@ -17,7 +18,7 @@ function formatDate(value: string): string | null {
   return Number.isNaN(date.getTime()) ? null : dateFormat.format(date);
 }
 
-const DOWNLOAD_BUTTON = "h-11 w-full px-5 text-[0.9375rem] sm:w-auto sm:min-w-64";
+const DOWNLOAD_BUTTON = "h-10 w-full px-4 text-sm sm:w-auto sm:min-w-60";
 const PRIMARY_CLASS = `${DOWNLOAD_BUTTON} shadow-[0_8px_20px_-10px_var(--primary)] hover:bg-primary-hover`;
 const SECONDARY_CLASS = `${DOWNLOAD_BUTTON} bg-card dark:bg-card`;
 
@@ -41,7 +42,7 @@ export function Hero() {
   let linux: ReactNode;
   if (loading) {
     linux = (
-      <div className="h-11 w-full sm:w-64">
+      <div className="h-10 w-full sm:w-60">
         <Skeleton className="h-full w-full rounded-lg" />
         <span className="sr-only">Loading the latest release</span>
       </div>
@@ -75,7 +76,7 @@ export function Hero() {
   let windows: ReactNode;
   if (loading) {
     windows = (
-      <div className="h-11 w-full sm:w-64">
+      <div className="h-10 w-full sm:w-60">
         <Skeleton className="h-full w-full rounded-lg" />
         <span className="sr-only">Loading the Windows download</span>
       </div>
@@ -113,7 +114,7 @@ export function Hero() {
           <a
             href="#install"
             onClick={() => setPlatform("windows")}
-            className="inline-flex min-h-11 items-center text-sm font-medium text-secondary-accent underline decoration-1 underline-offset-4 hover:decoration-2"
+            className="inline-flex min-h-9 items-center text-sm font-medium text-secondary-accent underline decoration-1 underline-offset-4 hover:decoration-2 pointer-coarse:min-h-11"
           >
             Build it from source on Windows
           </a>
@@ -126,22 +127,21 @@ export function Hero() {
     <section
       id="top-hero"
       aria-labelledby="hero-title"
-      className="relative isolate grid grid-cols-[minmax(0,1fr)] items-center gap-10 py-8 sm:py-10 lg:grid-cols-[minmax(0,1fr)_25rem] lg:gap-16 lg:py-14 xl:grid-cols-[minmax(0,1fr)_27rem] 3xl:grid-cols-[minmax(0,1fr)_34rem]"
+      className="relative isolate grid grid-cols-[minmax(0,1fr)] items-center gap-6 py-6 sm:py-8 lg:grid-cols-2 lg:gap-10 lg:py-10"
     >
-      <div aria-hidden="true" className="hero-dots pointer-events-none absolute inset-y-0 -right-16 left-1/3 -z-10" />
-      <div className="flex min-w-0 flex-col gap-5">
+      <div className="flex min-w-0 flex-col gap-4">
         <h1
           id="hero-title"
-          className="max-w-[14ch] font-heading text-[clamp(2.5rem,1.6rem+2.6vw,4.5rem)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance"
+          className="max-w-[15ch] font-heading text-[clamp(2rem,1.2rem+2.2vw,3.25rem)] leading-[1.05] font-semibold tracking-[-0.035em] text-balance"
         >
           Everything you copied, one shortcut away.
         </h1>
-        <p className="max-w-[46ch] text-base text-muted-foreground sm:text-lg sm:leading-relaxed">
+        <p className="max-w-[44ch] text-base text-muted-foreground">
           Clipsy keeps your clipboard history on your computer, on Linux and Windows. Press the shortcut, search,
           and paste anything you copied earlier.
         </p>
 
-        <div className="mt-1 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-4 sm:gap-y-3">
+        <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-3 sm:gap-y-3">
           <DownloadSlot>{linux}</DownloadSlot>
           <DownloadSlot>{windows}</DownloadSlot>
         </div>
@@ -152,14 +152,14 @@ export function Hero() {
           </p>
           <a
             href="#install"
-            className="inline-flex min-h-11 items-center font-medium text-secondary-accent underline decoration-1 underline-offset-4 hover:decoration-2"
+            className="inline-flex min-h-9 items-center font-medium text-secondary-accent underline decoration-1 underline-offset-4 hover:decoration-2 pointer-coarse:min-h-11"
           >
             Other ways to install
           </a>
           {platform !== "windows" && (
             <a
               href="#install"
-              className="inline-flex min-h-11 items-center font-medium text-secondary-accent underline decoration-1 underline-offset-4 hover:decoration-2"
+              className="inline-flex min-h-9 items-center font-medium text-secondary-accent underline decoration-1 underline-offset-4 hover:decoration-2 pointer-coarse:min-h-11"
             >
               Can't use sudo? Install to your home folder.
             </a>
@@ -167,7 +167,9 @@ export function Hero() {
         </div>
       </div>
 
-      <PopupDemo shortcut={shortcutFor(platform)} />
+      <Tilt max={12} className="w-full max-w-[28rem] lg:justify-self-end">
+        <PopupDemo shortcut={shortcutFor(platform)} />
+      </Tilt>
     </section>
   );
 }

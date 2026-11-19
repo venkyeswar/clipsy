@@ -9,6 +9,8 @@
     --font-heading: 'Familjen Grotesk Variable', var(--font-sans);
     --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
     --color-secondary-accent: var(--secondary-accent);
+    --color-ember: var(--ember);
+    --color-ember-foreground: var(--ember-foreground);
     --color-primary-hover: var(--primary-hover);
     --color-brand-teal: var(--brand-teal);
     --color-brand-violet: var(--brand-violet);
@@ -59,118 +61,116 @@
     --breakpoint-3xl: 120rem;
 }
 
+/* Fluid root size: every rem-based measure grows with the viewport. */
+html {
+  font-size: clamp(14px, 0.1vw + 13.2px, 16px);
+}
+
 /*
- * Clipsy palette, taken from the logo (teal board, violet and yellow sheets)
- * and the app (ember accent on the selected row and active tab).
+ * Clipsy palette. Indigo is the site's accent (buttons, focus, links in the page chrome).
+ * Ember is the app's own orange: it is used only inside the popup demo, so the demo
+ * matches the real app. Teal, violet and yellow come from the logo and are unchanged.
  *
- * Light "Daylight": cool paper, ink text, ember used only for the primary CTA.
- * Dark "Night shift": deep ink-indigo surfaces, luminous teal for focus/links.
- *
- * WCAG AA (computed): text on background/card/muted >= 4.7:1 in both themes
- * (muted text 6.0-7.1 light, 6.4-8.0 dark; teal links 4.8-5.7 light,
- * brand tints: teal 4.9, violet 5.8, yellow 5.2 on their soft fills in light;
- * 8.3-10.4 dark); primary-foreground on primary 5.1 light, 7.1 dark.
+ * Light: cool paper, ink text. Dark: deep ink surfaces, luminous indigo and teal.
+ * Contrast is checked by a script (see the report); every text pair is >= 4.5:1.
  */
 :root {
-    --background: #f3f5fc;
-    --foreground: #151935;
+    --background: #f5f6f9;
+    --foreground: #0e1220;
     --card: #ffffff;
-    --card-foreground: #151935;
+    --card-foreground: #0e1220;
     --popover: #ffffff;
-    --popover-foreground: #151935;
-    --primary: #c63f19;
-    --primary-hover: #a93412;
+    --popover-foreground: #0e1220;
+    --primary: #4338ca;
+    --primary-hover: #3730a3;
     --primary-foreground: #ffffff;
-    --secondary: #e7eaf6;
-    --secondary-foreground: #151935;
-    --secondary-accent: #08736c;
-    --muted: #e7eaf6;
-    --muted-foreground: #4f5679;
-    --accent: #e7eaf6;
-    --accent-foreground: #151935;
+    --secondary: #eceff5;
+    --secondary-foreground: #0e1220;
+    --secondary-accent: #0b7a6e;
+    --muted: #eceff5;
+    --muted-foreground: #4a5468;
+    --accent: #eceff5;
+    --accent-foreground: #0e1220;
     --destructive: #b42318;
-    --border: #d3d8ea;
-    --input: #8a90ad;
-    --ring: #08736c;
+    --border: #e1e5ee;
+    --input: #8b93a7;
+    --ring: #4338ca;
     --surface-raised: #ffffff;
+    --ember: #c63f19;
+    --ember-foreground: #ffffff;
     --brand-teal: #08736c;
     --brand-violet: #5e3fc0;
     --brand-yellow: #875d00;
     --brand-teal-soft: #d7f3ef;
     --brand-violet-soft: #ebe5fd;
     --brand-yellow-soft: #fff1c9;
-    --glow-a: rgb(63 208 192 / 0.38);
-    --glow-b: rgb(169 143 242 / 0.34);
     --sheet-violet: #a98ff2;
     --sheet-violet-edge: #6a49c8;
     --sheet-yellow: #ffcb45;
     --sheet-yellow-edge: #c98a12;
-    --chart-1: #c63f19;
-    --chart-2: #08736c;
-    --chart-3: #4f5679;
-    --chart-4: #8a90ad;
-    --chart-5: #151935;
+    --chart-1: #4338ca;
+    --chart-2: #0b7a6e;
+    --chart-3: #566074;
+    --chart-4: #8b93a7;
+    --chart-5: #0e1220;
     --radius: 0.625rem;
     --sidebar: #ffffff;
-    --sidebar-foreground: #151935;
-    --sidebar-primary: #c63f19;
+    --sidebar-foreground: #0e1220;
+    --sidebar-primary: #4338ca;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #e7eaf6;
-    --sidebar-accent-foreground: #151935;
-    --sidebar-border: #d3d8ea;
-    --sidebar-ring: #08736c;
-    /* The tinted band behind Install and Downloads; scroll fades blend into it. */
-    --panel-surface: color-mix(in oklch, #ffffff 60%, #f3f5fc);
+    --sidebar-accent: #eceff5;
+    --sidebar-accent-foreground: #0e1220;
+    --sidebar-border: #e1e5ee;
+    --sidebar-ring: #4338ca;
 }
 
 .dark {
-    --background: #10132a;
-    --foreground: #eceefa;
-    --card: #181c3a;
-    --card-foreground: #eceefa;
-    --popover: #1c2142;
-    --popover-foreground: #eceefa;
-    --primary: #ff7a50;
-    --primary-hover: #ff9370;
-    --primary-foreground: #10132a;
-    --secondary: #21264a;
-    --secondary-foreground: #eceefa;
-    --secondary-accent: #4fd8c8;
-    --muted: #21264a;
-    --muted-foreground: #a4aacb;
-    --accent: #262c55;
-    --accent-foreground: #eceefa;
+    --background: #0a0c11;
+    --foreground: #e8eaf2;
+    --card: #11141b;
+    --card-foreground: #e8eaf2;
+    --popover: #151922;
+    --popover-foreground: #e8eaf2;
+    --primary: #8b8cff;
+    --primary-hover: #a5a6ff;
+    --primary-foreground: #0a0c11;
+    --secondary: #181c26;
+    --secondary-foreground: #e8eaf2;
+    --secondary-accent: #5eead4;
+    --muted: #181c26;
+    --muted-foreground: #aab2c5;
+    --accent: #1d2230;
+    --accent-foreground: #e8eaf2;
     --destructive: #ff8a80;
-    --border: #2d3360;
-    --input: #4a5288;
-    --ring: #4fd8c8;
-    --surface-raised: #1c2142;
+    --border: #232836;
+    --input: #3a4156;
+    --ring: #8b8cff;
+    --surface-raised: #151922;
+    --ember: #ff7a50;
+    --ember-foreground: #10132a;
     --brand-teal: #4fd8c8;
     --brand-violet: #b49df5;
     --brand-yellow: #ffcb45;
     --brand-teal-soft: #15343f;
     --brand-violet-soft: #272456;
     --brand-yellow-soft: #33301f;
-    --glow-a: rgb(63 208 192 / 0.26);
-    --glow-b: rgb(169 143 242 / 0.3);
     --sheet-violet: #8a6fe0;
     --sheet-violet-edge: #4f34a3;
     --sheet-yellow: #e9b530;
     --sheet-yellow-edge: #a8720c;
-    --chart-1: #ff7a50;
-    --chart-2: #4fd8c8;
-    --chart-3: #a4aacb;
-    --chart-4: #4a5288;
-    --chart-5: #eceefa;
-    --sidebar: #181c3a;
-    --sidebar-foreground: #eceefa;
-    --sidebar-primary: #ff7a50;
-    --sidebar-primary-foreground: #10132a;
-    --sidebar-accent: #262c55;
-    --sidebar-accent-foreground: #eceefa;
-    --sidebar-border: #2d3360;
-    --sidebar-ring: #4fd8c8;
-    --panel-surface: color-mix(in oklch, #181c3a 40%, #10132a);
+    --chart-1: #8b8cff;
+    --chart-2: #5eead4;
+    --chart-3: #9aa3b8;
+    --chart-4: #3a4156;
+    --chart-5: #e8eaf2;
+    --sidebar: #11141b;
+    --sidebar-foreground: #e8eaf2;
+    --sidebar-primary: #8b8cff;
+    --sidebar-primary-foreground: #0a0c11;
+    --sidebar-accent: #1d2230;
+    --sidebar-accent-foreground: #e8eaf2;
+    --sidebar-border: #232836;
+    --sidebar-ring: #8b8cff;
 }
 
 @layer base {
@@ -212,51 +212,6 @@ section[id] {
   scroll-margin-top: 4.25rem;
 }
 
-/*
- * Scrollable install and downloads panels (large screens only). Thin scrollbar in the
- * theme colours; overscroll stays inside the panel so the page does not jump.
- */
-.scroll-panel {
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 45%, transparent) transparent;
-}
-.scroll-panel::-webkit-scrollbar {
-  width: 8px;
-}
-.scroll-panel::-webkit-scrollbar-track {
-  background: transparent;
-}
-.scroll-panel::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-.scroll-panel::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklch, var(--muted-foreground) 65%, transparent);
-  background-clip: padding-box;
-}
-
-/* Hero backdrop: one soft two-colour glow behind the demo (depth, not decoration). */
-.hero-glow {
-  background:
-    radial-gradient(closest-side, var(--glow-a), transparent 70%) 30% 40% / 70% 70% no-repeat,
-    radial-gradient(closest-side, var(--glow-b), transparent 70%) 75% 65% / 70% 70% no-repeat;
-  filter: blur(8px);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .hero-glow {
-    animation: glow-drift 18s ease-in-out infinite alternate;
-  }
-}
-
-@keyframes glow-drift {
-  from { transform: translate3d(-2%, 1%, 0) scale(1); }
-  to { transform: translate3d(2%, -2%, 0) scale(1.05); }
-}
-
 /* The two coloured sheets behind the demo window, as in the logo. */
 .sheet-violet {
   background: var(--sheet-violet);
@@ -265,13 +220,6 @@ section[id] {
 .sheet-yellow {
   background: var(--sheet-yellow);
   box-shadow: 0 6px 0 var(--sheet-yellow-edge);
-}
-
-/* Faint dot grid that sits only behind the hero. */
-.hero-dots {
-  background-image: radial-gradient(color-mix(in oklch, var(--foreground) 14%, transparent) 1px, transparent 1px);
-  background-size: 22px 22px;
-  mask-image: radial-gradient(ellipse 60% 70% at 70% 45%, black, transparent 75%);
 }
 
 /* Keycaps: a pressable cap with a visible bottom edge. */
@@ -302,5 +250,60 @@ section[id] {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+ * Thin, themed scrollbars. Browsers that support the standard properties (Firefox, and
+ * Chrome only where ::-webkit-scrollbar is unsupported) use scrollbar-width/color; WebKit
+ * and Blink use the pseudo-elements. The @supports split keeps exactly one system active.
+ */
+@supports not selector(::-webkit-scrollbar) {
+  html,
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 45%, transparent) transparent;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.spotlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
+  background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%), color-mix(in oklch, var(--secondary-accent) 8%, transparent), transparent 70%);
+}
+/* Content sits above the spotlight tint, so a hover never washes over text. */
+.spotlight > * {
+  position: relative;
+  z-index: 1;
+}
+.spotlight:hover::before {
+  opacity: 1;
+}
+@media (hover: none), (prefers-reduced-motion: reduce) {
+  .spotlight::before {
+    display: none;
   }
 }

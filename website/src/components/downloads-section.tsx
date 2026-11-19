@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,55 +35,42 @@ function formatDate(iso: string): string {
   return Number.isNaN(date.getTime()) ? "" : dateFormat.format(date);
 }
 
-/** A download button with its size shown next to it (kept outside the button for contrast). */
-function AssetButton({
+/** One downloadable file: where it is for and its name on the left, size and a Download button on the right. */
+function FileRow({
+  where,
   asset,
   label,
-  text,
-  variant = "default",
+  primary = false,
 }: {
+  where: string;
   asset: ReleaseAsset;
   label: string;
-  text: string;
-  variant?: "default" | "outline" | "secondary";
+  /** The visitor's platform gets the one filled button in the release; the rest are outlined. */
+  primary?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <Button
-        variant={variant}
-        className={variant === "default" ? "h-11 px-4 hover:bg-primary-hover" : "h-11 px-4"}
-        render={<a href={asset.url} rel="noopener" aria-label={label} />}
-      >
-        {text}
-      </Button>
-      {asset.size > 0 && (
-        <span className="text-xs tabular-nums text-muted-foreground">{formatBytes(asset.size)}</span>
-      )}
-    </div>
+    <li className="-mx-2 flex items-center gap-3 rounded-md px-2 py-2 transition-colors duration-150 hover:bg-muted/60">
+      <p className="min-w-0 flex-1 text-sm break-all">
+        <span className="text-muted-foreground">{where}</span>{" "}
+        <span className="font-medium text-foreground">{asset.name}</span>
+      </p>
+      <div className="flex shrink-0 items-center gap-3">
+        {asset.size > 0 && (
+          <span className="text-xs tabular-nums text-muted-foreground">{formatBytes(asset.size)}</span>
+        )}
+        <Button
+          variant={primary ? "default" : "outline"}
+          className={cn("h-7 px-2.5 text-xs", primary && "hover:bg-primary-hover")}
+          render={<a href={asset.url} rel="noopener" aria-label={label} />}
+        >
+          Download
+        </Button>
+      </div>
+    </li>
   );
 }
 
-/** One platform's files in the release card. Missing files show the coming-soon state. */
-function PlatformFiles({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="mt-3 flex flex-col gap-2">
-      <h4 className="text-sm font-medium text-foreground">{title}</h4>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{children}</div>
-    </div>
-  );
-}
-
-function ComingSoon({ what }: { what: string }) {
-  return (
-    <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-      <Badge variant="secondary" className="bg-brand-yellow-soft text-brand-yellow">
-        Coming soon
-      </Badge>
-      <span>{what}</span>
-    </p>
-  );
-}
-
+/** The latest release, or a previous one picked on mobile: a title row, then a thin list of files. */
 function ReleaseBlock({
   release,
   isLatest,
@@ -96,15 +85,15 @@ function ReleaseBlock({
   const date = formatDate(release.date);
   const windowsCommands = windowsVerifyCommands(release);
   const hasWindows = Boolean(windowsInstaller || windowsPortable);
+  const windowsVisitor = platform === "windows";
 
   return (
     <div
       data-release-block
-      className="relative overflow-hidden rounded-xl border border-border bg-card p-4 text-card-foreground sm:p-5"
+      className="rounded-xl border border-border/70 bg-card p-3 text-card-foreground sm:p-4"
     >
-      <div aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-secondary-accent" />
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <h3 className="font-heading text-lg font-semibold tracking-[-0.02em]">Clipsy {version}</h3>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <h3 className="font-heading text-base font-semibold tracking-tight">Clipsy {version}</h3>
         {isLatest && (
           <Badge variant="secondary" className="bg-brand-teal-soft text-brand-teal">
             Latest
@@ -112,54 +101,63 @@ function ReleaseBlock({
         )}
         {release.prerelease && <Badge variant="outline">Pre-release</Badge>}
         {date && (
-          <span className="text-sm text-muted-foreground sm:ml-auto">
+          <span className="text-xs text-muted-foreground sm:ml-auto">
             <time dateTime={release.date}>{date}</time>
           </span>
         )}
       </div>
 
-      <PlatformFiles title="Linux">
+      <ul className="mt-3 divide-y divide-border/60 border-t border-border/60">
         {deb ? (
-          <AssetButton asset={deb} label={`Download .deb, version ${version}`} text="Download .deb" />
+          <FileRow
+            where="Linux"
+            asset={deb}
+            label={`Download .deb, version ${version}`}
+            primary={!windowsVisitor}
+          />
         ) : (
-          <p className="text-sm text-muted-foreground">No .deb package for this version.</p>
+          <li className="py-2 text-sm">
+            <span className="text-muted-foreground">Linux</span>{" "}
+            <span className="text-muted-foreground">No .deb package for this version.</span>
+          </li>
         )}
-      </PlatformFiles>
-
-      <PlatformFiles title="Windows">
         {windowsInstaller && (
-          <AssetButton
+          <FileRow
+            where="Windows"
             asset={windowsInstaller}
             label={`Installer (.exe), Windows setup for ${version}`}
-            text="Installer (.exe)"
+            primary={windowsVisitor}
           />
         )}
         {windowsPortable && (
-          <AssetButton
+          <FileRow
+            where="Windows"
             asset={windowsPortable}
-            variant="outline"
             label={`Portable (.zip), Windows for ${version}`}
-            text="Portable (.zip)"
           />
         )}
-        {!hasWindows && <ComingSoon what="The Windows download for this version is coming soon." />}
-      </PlatformFiles>
-
-      {sums && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <AssetButton
+        {!hasWindows && (
+          <li className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2 text-sm">
+            <span className="text-muted-foreground">Windows</span>
+            <Badge variant="secondary" className="bg-brand-yellow-soft text-brand-yellow">
+              Coming soon
+            </Badge>
+            <span className="text-muted-foreground">The Windows download for this version is coming soon.</span>
+          </li>
+        )}
+        {sums && (
+          <FileRow
+            where="Checksums"
             asset={sums}
-            variant="secondary"
             label={`SHA256SUMS, checksums for ${version}`}
-            text="SHA256SUMS"
           />
-        </div>
-      )}
+        )}
+      </ul>
 
-      {platform === "windows"
+      {windowsVisitor
         ? windowsCommands.length > 0 && (
             <div className="mt-3">
-              <p className="mb-1.5 text-sm text-muted-foreground">Check your download in PowerShell:</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">Check your download in PowerShell:</p>
               <div className="flex flex-col gap-1.5">
                 {windowsCommands.map((command) => (
                   <CommandLine key={command} text={command} label="Copy PowerShell command" wrap />
@@ -169,18 +167,18 @@ function ReleaseBlock({
           )
         : sums && (
             <div className="mt-3">
-              <p className="mb-1.5 text-sm text-muted-foreground">Check your download with:</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">Check your download with:</p>
               <CommandLine text={CHECKSUM_VERIFY_COMMAND} label="Copy checksum command" />
             </div>
           )}
 
-      <p className="mt-3 text-sm text-muted-foreground">
+      <p className="mt-3 text-xs text-muted-foreground">
         Changes and details for this release are in the{" "}
         <a
           href={release.notesUrl}
           target="_blank"
           rel="noopener"
-          className="font-medium text-secondary-accent underline underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="font-medium text-secondary-accent underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           release notes on GitHub
         </a>
@@ -196,7 +194,7 @@ function TableLink({ href, label, text }: { href: string; label: string; text: s
       href={href}
       rel="noopener"
       aria-label={label}
-      className="inline-flex min-h-11 items-center rounded-md px-2 font-medium text-foreground underline underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+      className="inline-flex min-h-8 items-center rounded-md px-2 font-medium text-foreground underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       {text}
     </a>
@@ -216,14 +214,14 @@ function shipsSummary(release: Release): string {
   return parts.length > 0 ? parts.join(", ") : "no installers yet";
 }
 
-/** The heading stays fixed above the scrolling body (see ScrollPanel in App). */
+/** The section heading (rendered by ScrollPanel in App). */
 export function DownloadsHeading() {
   return (
     <div>
-      <h2 id="downloads-heading" className="font-heading text-[clamp(1.25rem,1.05rem+0.7vw,1.75rem)] font-semibold tracking-[-0.02em]">
+      <h2 id="downloads-heading" className="font-heading text-lg font-medium tracking-tight">
         Downloads
       </h2>
-      <p className="mt-1 max-w-[60ch] text-muted-foreground">
+      <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">
         The latest version is on top. Older versions stay available.
       </p>
     </div>
@@ -239,8 +237,8 @@ export function DownloadsSection() {
     return (
       <div className={BODY_CLASS} aria-busy="true">
         <div className="flex flex-col gap-4">
-          <Skeleton aria-hidden="true" className="h-44 w-full" />
-          <Skeleton aria-hidden="true" className="h-24 w-full" />
+          <Skeleton aria-hidden="true" className="h-36 w-full" />
+          <Skeleton aria-hidden="true" className="h-16 w-full" />
         </div>
       </div>
     );
@@ -253,7 +251,7 @@ export function DownloadsSection() {
           <p className="text-muted-foreground">No releases are published yet.</p>
           <Button
             variant="outline"
-            className="mt-4 h-11 px-4"
+            className="mt-3 h-8 px-3 text-sm"
             render={<a href={RELEASES_URL} target="_blank" rel="noopener" />}
           >
             View releases on GitHub
@@ -274,48 +272,55 @@ export function DownloadsSection() {
           "Showing the last saved release list because GitHub could not be reached."}
       </div>
 
-      <div aria-live="polite" className="mt-4">
+      {/* Mobile only: the version picker that switches the card above. */}
+      <div className="mt-3 md:hidden">
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="outline" className="h-8 px-3 text-sm" />}>
+            {shown && <span className="sr-only">Choose a version: </span>}
+            {shown ? `Version ${shown.version}` : "Choose a version"}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {releases.map((release) => (
+              <DropdownMenuItem
+                key={release.tag}
+                onClick={() => setSelectedTag(release.tag)}
+                className="flex flex-col items-start gap-0.5"
+              >
+                <span>
+                  Clipsy {release.version}
+                  {release.prerelease ? " (pre-release)" : ""}
+                </span>
+                <span className="text-xs text-muted-foreground">{shipsSummary(release)}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div aria-live="polite" className="mt-3">
         {shown ? (
           <ReleaseBlock release={shown} isLatest={shown.tag === latest?.tag} platform={platform} />
         ) : (
-          <p className="rounded-xl border border-border bg-card p-4 text-muted-foreground sm:p-5">
+          <p className="rounded-xl border border-border/70 bg-card/60 p-3.5 text-sm text-muted-foreground">
             No stable release yet.
           </p>
         )}
       </div>
 
-      <div className="mt-5">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-          <h3 id="previous-versions-heading" className="font-heading text-base font-semibold tracking-[-0.01em]">
-            Previous versions
-          </h3>
-          <div className="md:hidden">
-            <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline" className="h-11 px-4" />}>
-                {shown && <span className="sr-only">Choose a version: </span>}
-                {shown ? `Version ${shown.version}` : "Choose a version"}
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {releases.map((release) => (
-                  <DropdownMenuItem
-                    key={release.tag}
-                    onClick={() => setSelectedTag(release.tag)}
-                    className="flex flex-col items-start gap-0.5"
-                  >
-                    <span>
-                      Clipsy {release.version}
-                      {release.prerelease ? " (pre-release)" : ""}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{shipsSummary(release)}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {previous.length > 0 ? (
-          <Table aria-labelledby="previous-versions-heading">
+      {previous.length > 0 && (
+        <details className="group mt-3 overflow-hidden rounded-xl border border-border/70">
+          <summary className="flex h-9 cursor-pointer list-none items-center justify-between gap-3 px-3 transition-colors duration-150 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+            <h3 className="font-heading text-sm font-medium tracking-tight">
+              Previous versions{" "}
+              <span className="tabular-nums text-muted-foreground">({previous.length})</span>
+            </h3>
+            <ChevronDown
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
+            />
+          </summary>
+          <div className="px-2 pb-2 sm:px-3">
+          <Table aria-label="Previous versions">
             <TableHeader>
               <TableRow>
                 <TableHead scope="col">Version</TableHead>
@@ -327,7 +332,7 @@ export function DownloadsSection() {
             </TableHeader>
             <TableBody>
               {previous.map((release) => (
-                <TableRow key={release.tag}>
+                <TableRow key={release.tag} className="hover:bg-muted/60">
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span className="tabular-nums">{release.version}</span>
@@ -367,10 +372,9 @@ export function DownloadsSection() {
               ))}
             </TableBody>
           </Table>
-        ) : (
-          <p className="text-sm text-muted-foreground">No other releases yet.</p>
-        )}
-      </div>
+          </div>
+        </details>
+      )}
     </div>
   );
 }

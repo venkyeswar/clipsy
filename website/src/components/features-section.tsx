@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { EyeOff, FileText, Image as ImageIcon, Lock, Search, Star, Trash2, Type } from "lucide-react";
 import { cn } from "cn";
 import { Card } from "@/components/ui/card";
+import { Spotlight } from "@/components/spotlight";
+import { Tilt } from "@/components/tilt";
 
 /*
  * Small illustrations, one per tile. They are decorative (aria-hidden) and use
@@ -53,7 +55,7 @@ function SearchArt() {
 function PinArt() {
   return (
     <div aria-hidden="true" className="mt-auto flex items-center gap-2 pt-4">
-      <span className="flex size-10 items-center justify-center rounded-xl bg-brand-yellow-soft text-brand-yellow transition-transform duration-300 group-hover/tile:-rotate-12 group-hover/tile:scale-110">
+      <span className="flex size-9 items-center justify-center rounded-lg bg-brand-yellow-soft text-brand-yellow transition-transform duration-300 group-hover/tile:-rotate-12 group-hover/tile:scale-110">
         <Star className="size-5 fill-current" />
       </span>
       <span className="h-2 w-16 rounded-full bg-muted" />
@@ -78,8 +80,8 @@ function ClearArt() {
           {tab}
         </span>
       ))}
-      <span className="ml-1 flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary transition-transform duration-300 group-hover/tile:-rotate-6">
-        <Trash2 className="size-3.5" />
+      <span className="ml-1 flex size-9 items-center justify-center rounded-lg bg-brand-teal-soft text-brand-teal transition-transform duration-300 group-hover/tile:-rotate-6">
+        <Trash2 className="size-4" />
       </span>
       <span className="inline-flex items-center gap-1 rounded-md bg-brand-yellow-soft px-2 py-1 text-xs text-foreground">
         <Star className="size-3 fill-current text-brand-yellow" /> kept
@@ -91,7 +93,7 @@ function ClearArt() {
 function PrivateArt() {
   return (
     <div aria-hidden="true" className="mt-auto flex items-center gap-2 pt-4">
-      <span className="flex size-10 items-center justify-center rounded-xl bg-brand-violet-soft text-brand-violet">
+      <span className="flex size-9 items-center justify-center rounded-lg bg-brand-violet-soft text-brand-violet">
         <Lock className="size-5" />
       </span>
       <span className="flex items-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1 font-mono text-xs text-muted-foreground">
@@ -111,77 +113,89 @@ function DesktopArt() {
   );
 }
 
-type Feature = { name: string; description: string; art: ReactNode; className: string };
+/** `span` sizes the grid cell (kept on the tilt wrapper); `tone` is the card's background. */
+type Feature = { name: string; description: string; art: ReactNode; span: string; tone: string };
 
 const features: Feature[] = [
   {
     name: "Remembers text, images and files",
     description: "Everything you copy stays in your history, so you can paste it again later.",
     art: <HistoryArt />,
-    className: "sm:col-span-2 lg:col-span-1 lg:row-span-2 bg-brand-teal-soft/50",
+    span: "sm:col-span-2 lg:col-span-1",
+    tone: "[background-image:linear-gradient(color-mix(in_oklch,var(--brand-teal-soft)_50%,transparent),color-mix(in_oklch,var(--brand-teal-soft)_50%,transparent))]",
   },
   {
     name: "Search in a keystroke",
     description: "Type to filter your history as you go.",
     art: <SearchArt />,
-    className: "",
+    span: "",
+    tone: "",
   },
   {
     name: "Pin what you reuse",
     description: "Pinned items stay at the top and are kept until you remove them.",
     art: <PinArt />,
-    className: "",
+    span: "",
+    tone: "",
   },
   {
     name: "Clear one tab at a time",
     description:
       "Clear text, images or files separately. Pinned items are kept unless you choose to remove them too.",
     art: <ClearArt />,
-    className: "sm:col-span-2",
+    span: "sm:col-span-2 lg:col-span-1",
+    tone: "",
   },
   {
     name: "Private by default",
     description:
       "Copies from password managers are skipped, and your history stays on your computer.",
     art: <PrivateArt />,
-    className: "",
+    span: "",
+    tone: "",
   },
   {
     name: "Works where you work",
     description: "Runs on Linux (X11 and GNOME with Wayland) and on Windows 10 and 11.",
     art: <DesktopArt />,
-    className: "",
+    span: "",
+    tone: "",
   },
 ];
 
 export function FeaturesSection() {
   return (
     <div>
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
-        <h2 className="font-heading text-[clamp(1.25rem,1.05rem+0.7vw,1.75rem)] font-semibold tracking-[-0.02em]">What Clipsy does</h2>
-        <p className="max-w-[52ch] text-muted-foreground sm:text-right">
+      <div>
+        <h2 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">What Clipsy does</h2>
+        <p className="mt-1 max-w-[60ch] text-muted-foreground">
           Clipsy watches what you copy, keeps it in order, and stays out of the way until you
           need it again.
         </p>
       </div>
 
-      <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-flow-dense lg:grid-cols-4">
+      <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
         {features.map((feature) => (
-          <Card
-            key={feature.name}
-            className={cn(
-              "group/tile gap-0 px-4 py-4 ring-border transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-float hover:ring-secondary-accent/50 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-              feature.className,
-            )}
-          >
-            <dt className="font-heading text-[1.0625rem] leading-snug font-semibold tracking-[-0.01em] text-foreground">
-              {feature.name}
-            </dt>
-            <dd className="mt-1 flex flex-1 flex-col text-sm text-muted-foreground">
-              <p>{feature.description}</p>
-              {feature.art}
-            </dd>
-          </Card>
+          // The wrapper stretches to the grid row; [&>div] makes the tilt layer fill it too,
+          // so cards in the same row end at the same height.
+          <Tilt key={feature.name} max={4} className={cn("h-full [&>div]:h-full", feature.span)}>
+            <Spotlight className="h-full rounded-xl">
+              <Card
+                className={cn(
+                  "group/tile h-full gap-0 bg-background/80 p-3.5 ring-border backdrop-blur-sm transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-float hover:ring-primary/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+                  feature.tone,
+                )}
+              >
+                <dt className="font-heading text-base leading-snug font-semibold tracking-[-0.01em] text-foreground">
+                  {feature.name}
+                </dt>
+                <dd className="mt-1 flex flex-1 flex-col text-sm text-muted-foreground">
+                  <p>{feature.description}</p>
+                  {feature.art}
+                </dd>
+              </Card>
+            </Spotlight>
+          </Tilt>
         ))}
       </dl>
     </div>

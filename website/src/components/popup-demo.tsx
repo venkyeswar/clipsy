@@ -214,9 +214,8 @@ export function PopupDemo({
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="relative isolate mx-auto w-full max-w-[22.5rem] pt-8">
-        {/* Depth: a soft glow and the logo's violet and yellow sheets fanned behind the window. */}
-        <div aria-hidden="true" className="hero-glow pointer-events-none absolute -inset-x-16 -inset-y-10 -z-20" />
+      <div className="relative isolate mx-auto w-full pt-8">
+        {/* Depth: the logo's violet and yellow sheets fanned behind the window. */}
         <motion.div
           aria-hidden="true"
           initial={startPlaying ? { rotate: 0, opacity: 0 } : false}
@@ -315,13 +314,13 @@ export function PopupDemo({
             >
               <div className="flex items-center gap-1.5">
                 <TabsList aria-label="Filter clipboard items" className="relative h-auto! w-auto! min-w-0 flex-1 rounded-lg bg-muted/60 p-0.5">
-                  <TabsIndicator className="bg-primary shadow-[0_4px_14px_-4px_var(--primary)]" />
+                  <TabsIndicator className="bg-ember shadow-[0_4px_14px_-4px_var(--ember)]" />
                   {TABS.map((value) => (
                     <TabsTrigger
                       key={value}
                       value={value}
                       aria-label={value === "pinned" ? "Pinned" : undefined}
-                      className="z-10 min-h-11 flex-1 px-1 text-xs transition-colors data-active:bg-transparent data-active:text-primary-foreground data-active:shadow-none dark:data-active:border-transparent dark:data-active:bg-transparent dark:data-active:text-primary-foreground"
+                      className="z-10 min-h-11 flex-1 px-1 text-xs transition-colors data-active:bg-transparent data-active:text-ember-foreground data-active:shadow-none dark:data-active:border-transparent dark:data-active:bg-transparent dark:data-active:text-ember-foreground"
                     >
                       {value === "pinned" ? <Star aria-hidden="true" className="size-3.5 fill-current" /> : TAB_META[value].label}
                     </TabsTrigger>
@@ -371,7 +370,7 @@ export function PopupDemo({
                         onKeyDown={(event) => handleRowKey(event, index, item.id)}
                         className={cn(
                           "flex min-h-11 shrink-0 cursor-pointer items-center gap-2.5 rounded-lg px-2 text-[0.8125rem] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                          isSelected ? "bg-primary/16 ring-1 ring-primary/55" : "hover:bg-muted/70",
+                          isSelected ? "bg-ember/16 ring-1 ring-ember/55" : "hover:bg-muted/70",
                         )}
                       >
                         <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-md", KIND_TONE[item.kind])}>

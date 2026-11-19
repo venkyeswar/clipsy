@@ -139,11 +139,11 @@ export function SiteHeader() {
   const download = useHeaderDownload();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
-      <div className={`${PAGE_CONTAINER} flex h-14 items-center justify-between gap-2`}>
+    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/60 backdrop-blur">
+      <div className={`${PAGE_CONTAINER} flex h-12 items-center justify-between gap-2`}>
         <a
           href="#top"
-          className="-ml-1 flex min-h-11 items-center gap-2 rounded-lg px-1 font-heading text-lg font-semibold tracking-[-0.02em]"
+          className="flex min-h-11 items-center gap-2 rounded-lg font-heading text-lg font-semibold tracking-[-0.02em]"
         >
           <img
             src={`${import.meta.env.BASE_URL}logo.svg`}
@@ -160,7 +160,7 @@ export function SiteHeader() {
             <Button
               key={link.href}
               variant="ghost"
-              className="h-11 px-3 text-muted-foreground hover:text-foreground aria-[current=location]:bg-muted aria-[current=location]:text-foreground"
+              className="h-11 px-3 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground aria-[current=location]:bg-muted aria-[current=location]:font-medium aria-[current=location]:text-foreground"
               render={<a href={link.href} />}
               aria-current={active === link.href.slice(1) ? "location" : undefined}
             >
@@ -169,7 +169,7 @@ export function SiteHeader() {
           ))}
           <Button
             variant="ghost"
-            className="h-11 px-3 text-muted-foreground hover:text-foreground"
+            className="h-11 px-3 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
             render={
               <a href={githubUrl} target="_blank" rel="noopener" />
             }
@@ -212,7 +212,7 @@ export function SiteHeader() {
                     render={
                       <Button
                         variant="ghost"
-                        className="h-11 justify-start text-base"
+                        className="h-11 justify-start text-base aria-[current=location]:bg-muted aria-[current=location]:font-medium aria-[current=location]:text-foreground"
                         render={<a href={link.href} />}
                         aria-current={active === link.href.slice(1) ? "location" : undefined}
                       />

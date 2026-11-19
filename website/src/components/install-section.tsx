@@ -43,18 +43,18 @@ function Step({
   children?: ReactNode;
 }) {
   return (
-    <li className="relative grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3">
+    <li className="relative grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3">
       <span
         aria-hidden="true"
-        className="mt-px flex size-7 items-center justify-center rounded-full border border-secondary-accent/40 bg-brand-teal-soft font-mono text-xs font-semibold text-brand-teal"
+        className="mt-px flex size-6 items-center justify-center rounded-full border border-secondary-accent/40 bg-brand-teal-soft font-mono text-xs font-semibold text-brand-teal"
       >
         {number}
       </span>
       <div className="min-w-0">
-        <p className="font-medium text-foreground">{step.title}</p>
+        <p className="text-sm font-medium text-foreground">{step.title}</p>
         <p className="text-sm text-muted-foreground">{step.detail}</p>
         {waiting && step.needsRelease ? (
-          <Skeleton aria-hidden="true" className="mt-1.5 h-11 w-full" />
+          <Skeleton aria-hidden="true" className="mt-1.5 h-9 w-full" />
         ) : (
           <Commands commands={step.commands} />
         )}
@@ -83,7 +83,7 @@ function PlatformSwitch({ value, onChange }: { value: SelectedPlatform; onChange
     { value: "windows", label: "Windows" },
   ];
   return (
-    <div role="group" aria-label="Operating system" className="inline-flex rounded-lg border border-border bg-muted p-1">
+    <div role="group" aria-label="Operating system" className="inline-flex h-8 gap-0.5 rounded-lg border border-border p-0.5">
       {options.map((option) => {
         const selected = option.value === value;
         return (
@@ -93,10 +93,8 @@ function PlatformSwitch({ value, onChange }: { value: SelectedPlatform; onChange
             aria-pressed={selected}
             onClick={() => onChange(option.value)}
             className={cn(
-              "min-h-11 min-w-28 rounded-md px-4 text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-              selected
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border"
-                : "text-muted-foreground hover:text-foreground",
+              "min-w-20 rounded-md px-3 text-sm font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              selected ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {option.label}
@@ -117,7 +115,7 @@ function WindowsTabPanel({ tab, waiting }: { tab: WindowsInstallTab; waiting: bo
       {runsApp && (
         <p
           role="note"
-          className="mt-3 max-w-[62ch] rounded-lg border border-brand-yellow/40 bg-brand-yellow-soft px-3 py-2.5 text-sm text-foreground"
+          className="mt-3 max-w-[62ch] rounded-lg border border-brand-yellow/40 bg-brand-yellow-soft px-3 py-2 text-sm text-foreground"
         >
           <span className="font-medium">SmartScreen:</span> {SMARTSCREEN_NOTE}
         </p>
@@ -127,7 +125,7 @@ function WindowsTabPanel({ tab, waiting }: { tab: WindowsInstallTab; waiting: bo
         <p className="mt-3 max-w-[62ch] font-medium text-foreground">{tab.notice}</p>
       )}
 
-      <ol aria-label={`Steps for ${tab.title}`} className="mt-3 flex flex-col gap-3.5">
+      <ol aria-label={`Steps for ${tab.title}`} className="mt-3 flex flex-col gap-3">
         {tab.steps.map((step, index) => (
           <Step key={step.title} step={step} number={index + 1} waiting={waiting} />
         ))}
@@ -136,14 +134,14 @@ function WindowsTabPanel({ tab, waiting }: { tab: WindowsInstallTab; waiting: bo
   );
 }
 
-/** The heading stays fixed above the scrolling body (see ScrollPanel in App). */
+/** The section heading (rendered by ScrollPanel in App). */
 export function InstallHeading() {
   return (
     <div>
-      <h2 id="install-heading" className="font-heading text-[clamp(1.25rem,1.05rem+0.7vw,1.75rem)] font-semibold tracking-[-0.02em]">
+      <h2 id="install-heading" className="font-heading text-lg font-medium tracking-tight">
         Install Clipsy
       </h2>
-      <p className="mt-1 max-w-[60ch] text-muted-foreground">
+      <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">
         Pick the way that suits you. Every option installs the same app.
       </p>
     </div>
@@ -181,19 +179,19 @@ export function InstallSection() {
         key={platform}
         value={activeId}
         onValueChange={(value) => setChoice({ platform, id: String(value) })}
-        className="mt-4 gap-0"
+        className="mt-3 gap-0"
       >
         <TabsList
           variant="line"
           aria-label={`Install options for ${platform === "windows" ? "Windows" : "Linux"}`}
           className="relative h-auto! w-full max-w-full justify-start gap-0 overflow-x-auto rounded-none border-b border-border p-0 [scrollbar-width:none]"
         >
-          <TabsIndicator className="top-auto! bottom-[-1px] h-0.5! rounded-full bg-primary" />
+          <TabsIndicator className="top-auto! bottom-[-1px] h-[1.5px]! rounded-full bg-primary" />
           {tabList.map((tab) => (
             <TabsTrigger
               key={tab.id}
               value={tab.id}
-              className="min-h-11 flex-none px-3 text-[0.875rem] after:hidden data-active:text-foreground"
+              className="h-9 flex-none px-3 text-sm text-muted-foreground transition-colors duration-150 after:hidden hover:border-b-primary/40 hover:text-foreground data-active:text-foreground"
             >
               {tab.title}
             </TabsTrigger>
@@ -205,7 +203,7 @@ export function InstallSection() {
               <TabsContent
                 key={tab.id}
                 value={tab.id}
-                className="pt-4 text-[0.9375rem] data-[hidden]:hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200"
+                className="pt-3 text-sm data-[hidden]:hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200"
               >
                 <WindowsTabPanel tab={tab} waiting={waiting} />
               </TabsContent>
@@ -217,7 +215,7 @@ export function InstallSection() {
                 <TabsContent
                   key={tab.id}
                   value={tab.id}
-                  className="pt-4 text-[0.9375rem] data-[hidden]:hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200"
+                  className="pt-3 text-sm data-[hidden]:hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200"
                 >
                   <p className="max-w-[62ch] text-muted-foreground">{tab.when}</p>
 
@@ -226,20 +224,20 @@ export function InstallSection() {
                       <p className="max-w-[62ch] text-muted-foreground">{tab.notice}</p>
                       <Button
                         variant="outline"
-                        className="mt-3 h-11 px-4"
+                        className="mt-2 h-8 px-3 text-sm"
                         render={<a href={releasesUrl()} target="_blank" rel="noopener" />}
                       >
                         View releases on GitHub
                       </Button>
                     </div>
                   ) : (
-                    <ol aria-label={`Steps for ${tab.title}`} className="mt-3 flex flex-col gap-3.5">
+                    <ol aria-label={`Steps for ${tab.title}`} className="mt-3 flex flex-col gap-3">
                       {tab.steps.map((step, index) => (
                         <Step key={step.title} step={step} number={index + 1} waiting={waiting}>
                           {tab.id === "snap" && index === 0 && (
                             <Button
                               variant="outline"
-                              className="mt-1.5 h-11 px-4"
+                              className="mt-1.5 h-8 px-3 text-sm"
                               render={<a href={SNAP_APP_CENTER_URL} rel="noopener" />}
                             >
                               Open in App Center
@@ -251,7 +249,7 @@ export function InstallSection() {
                   )}
 
                   {!showNotice && tab.extras.length > 0 && (
-                    <div className="mt-4 flex flex-col gap-2.5 border-t border-border pt-3">
+                    <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
                       {tab.extras.map((extra) => (
                         <Extra key={extra.label} extra={extra} />
                       ))}
@@ -262,7 +260,7 @@ export function InstallSection() {
             })}
       </Tabs>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
         <span className="font-medium text-foreground">After installing:</span>
         <span>press</span>
         <span className="inline-flex items-center gap-1">

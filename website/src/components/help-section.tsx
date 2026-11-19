@@ -17,11 +17,11 @@ import {
 
 function Question({ value, title, children }: { value: string; title: string; children: ReactNode }) {
   return (
-    <AccordionItem value={value} className="border-border px-4">
-      <AccordionTrigger className="min-h-12 items-center py-3 text-[0.9375rem] font-medium hover:no-underline hover:text-secondary-accent">
+    <AccordionItem value={value} className="border-border px-3">
+      <AccordionTrigger className="-mx-2 min-h-10 items-center rounded-md px-2 py-2 text-sm font-medium transition-colors duration-150 hover:bg-muted/60 hover:no-underline">
         {title}
       </AccordionTrigger>
-      <AccordionContent className="pb-4 text-[0.9375rem] text-muted-foreground [&_p:not(:last-child)]:mb-2 [&_a]:text-secondary-accent [&_code]:font-mono [&_code]:text-[0.8125rem] [&_code]:text-foreground">
+      <AccordionContent className="pb-3 text-sm text-muted-foreground [&_p:not(:last-child)]:mb-2 [&_a]:text-secondary-accent [&_code]:font-mono [&_code]:text-[0.8125rem] [&_code]:text-foreground">
         {children}
       </AccordionContent>
     </AccordionItem>
@@ -211,10 +211,10 @@ export function HelpSection() {
 
   return (
     <div>
-      <h2 className="font-heading text-[clamp(1.25rem,1.05rem+0.7vw,1.75rem)] font-semibold tracking-[-0.02em]">Help</h2>
+      <h2 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">Help</h2>
       <p className="mt-1 max-w-[60ch] text-muted-foreground">Answers to the questions people ask most.</p>
 
-      <Accordion key={platform} className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
+      <Accordion key={platform} className="mt-3 overflow-hidden rounded-xl border border-border/70 bg-background/80 backdrop-blur-sm">
         {questionsFor(platform, shortcutText)}
       </Accordion>
     </div>

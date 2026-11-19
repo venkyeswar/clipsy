@@ -48,7 +48,7 @@ export function CopyButton({ text, label = "Copy command" }: { text: string; lab
       size="icon"
       aria-label={label}
       className={cn(
-        "size-11 shrink-0 text-muted-foreground hover:text-foreground",
+        "size-7 shrink-0 text-muted-foreground hover:text-foreground pointer-coarse:size-11",
         copied && "text-secondary-accent hover:text-secondary-accent",
       )}
       onClick={handleClick}
@@ -62,7 +62,7 @@ export function CopyButton({ text, label = "Copy command" }: { text: string; lab
           transition={{ type: "spring", stiffness: 500, damping: 28 }}
           className="inline-flex"
         >
-          <Icon aria-hidden="true" className="size-4" />
+          <Icon aria-hidden="true" className="size-3.5" />
         </motion.span>
       </AnimatePresence>
     </Button>

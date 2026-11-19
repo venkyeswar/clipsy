@@ -8,7 +8,6 @@ pub mod util;
 
 #[cfg(windows)]
 pub mod app;
-#[cfg(windows)]
 pub mod autostart;
 #[cfg(windows)]
 pub mod backend;

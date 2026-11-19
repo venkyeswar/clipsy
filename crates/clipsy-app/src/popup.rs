@@ -14,6 +14,7 @@ use clipsy_core::{ClipItem, Filter, Format, Kind};
 use gtk::{gdk, gio, glib};
 
 use crate::app::{pad, State};
+use crate::placement::DEFAULT_SIZE;
 use crate::{clear_dialog, placement};
 
 /// How many rows the list shows at most. Search still looks through everything.
@@ -95,7 +96,7 @@ impl Popup {
             let resizing = Rc::new(std::cell::Cell::new(false));
             let (saved_w, saved_h) = load_saved_size();
             window.set_default_size(saved_w, saved_h);
-            window.set_size_request(300, 260);
+            window.set_size_request(MIN_SIZE.0, MIN_SIZE.1);
             window.set_resizable(true);
             // Closing (for example with Alt+F4) hides the window. We keep it for next time.
             window.set_hide_on_close(true);
@@ -1047,25 +1048,50 @@ fn add_move_handle(widget: &impl IsA<gtk::Widget>, window: &gtk::Window, moving:
 
 // --- Resizing ----------------------------------------------------------------------
 
-const MIN_SIZE: (i32, i32) = (300, 260);
+const MIN_SIZE: (i32, i32) = (380, 260);
 const MAX_SIZE: (i32, i32) = (900, 1000);
 
 fn size_file() -> Option<std::path::PathBuf> {
     clipsy_core::config::data_dir().ok().map(|d| d.join("popup-size"))
 }
 
-/// The size the user last dragged the popup to, or the default 380x480.
+/// Parses a saved "WxH" size, clamping each side to MIN_SIZE..=MAX_SIZE.
+/// Returns None if the text is not two whole numbers separated by 'x'.
+fn parse_size(s: &str) -> Option<(i32, i32)> {
+    let (w, h) = s.trim().split_once('x')?;
+    let w: i32 = w.parse().ok()?;
+    let h: i32 = h.parse().ok()?;
+    Some((w.clamp(MIN_SIZE.0, MAX_SIZE.0), h.clamp(MIN_SIZE.1, MAX_SIZE.1)))
+}
+
+/// Name of the marker file that records the one-time reset of the saved popup size.
+const SIZE_MARKER: &str = "popup-size-v2";
+
+/// The size the user last dragged the popup to, or DEFAULT_SIZE.
+///
+/// Before the 440x560 default, the popup saved sizes that are now too small to use. The
+/// first run after this change ignores any saved size and creates the marker file, so
+/// the new default shows once. After that, the saved size is used again.
 fn load_saved_size() -> (i32, i32) {
-    let parsed = size_file()
-        .and_then(|f| std::fs::read_to_string(f).ok())
-        .and_then(|text| {
-            let (w, h) = text.trim().split_once('x')?;
-            Some((w.parse::<i32>().ok()?, h.parse::<i32>().ok()?))
-        });
-    match parsed {
-        Some((w, h)) => (w.clamp(MIN_SIZE.0, MAX_SIZE.0), h.clamp(MIN_SIZE.1, MAX_SIZE.1)),
-        None => (380, 480),
+    match clipsy_core::config::data_dir() {
+        Ok(dir) => load_size_from(&dir),
+        Err(_) => DEFAULT_SIZE,
     }
+}
+
+/// Testable core of `load_saved_size`: reads and resets the size files in `dir`.
+fn load_size_from(dir: &std::path::Path) -> (i32, i32) {
+    let marker = dir.join(SIZE_MARKER);
+    if !marker.exists() {
+        if let Err(err) = std::fs::write(&marker, "") {
+            tracing::warn!("could not create {}: {err:#}", marker.display());
+        }
+        return DEFAULT_SIZE;
+    }
+    std::fs::read_to_string(dir.join("popup-size"))
+        .ok()
+        .and_then(|text| parse_size(&text))
+        .unwrap_or(DEFAULT_SIZE)
 }
 
 fn save_size(width: i32, height: i32) {
@@ -1133,6 +1159,53 @@ fn resize_handle(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_size_accepts_wxh() {
+        assert_eq!(parse_size("500x600"), Some((500, 600)));
+        assert_eq!(parse_size("  500x600\n"), Some((500, 600)));
+    }
+
+    #[test]
+    fn parse_size_clamps_to_min() {
+        assert_eq!(parse_size("100x100"), Some((380, 260)));
+    }
+
+    #[test]
+    fn parse_size_clamps_to_max() {
+        assert_eq!(parse_size("5000x5000"), Some(MAX_SIZE));
+    }
+
+    #[test]
+    fn parse_size_rejects_garbage() {
+        assert_eq!(parse_size("abc"), None);
+        assert_eq!(parse_size("500"), None);
+        assert_eq!(parse_size("500x"), None);
+        assert_eq!(parse_size("500x600x700"), None);
+        assert_eq!(parse_size(""), None);
+    }
+
+    #[test]
+    fn load_size_from_resets_once_then_reads_saved_size() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("popup-size-v2");
+        std::fs::write(dir.path().join("popup-size"), "500x600").unwrap();
+
+        // Marker absent: the old saved size is ignored and the marker is created.
+        assert_eq!(load_size_from(dir.path()), placement::DEFAULT_SIZE);
+        assert!(marker.exists());
+
+        // Marker present: the saved size is used.
+        assert_eq!(load_size_from(dir.path()), (500, 600));
+    }
+
+    #[test]
+    fn load_size_from_falls_back_on_garbage() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("popup-size-v2"), "").unwrap();
+        std::fs::write(dir.path().join("popup-size"), "garbage").unwrap();
+        assert_eq!(load_size_from(dir.path()), placement::DEFAULT_SIZE);
+    }
 
     #[test]
     fn compact_age_uses_short_units() {

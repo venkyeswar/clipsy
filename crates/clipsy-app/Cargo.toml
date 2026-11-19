@@ -21,6 +21,9 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 
+[dev-dependencies]
+tempfile = "3"
+
 [package.metadata.deb]
 name = "clipsy"
 maintainer = "venkyeswar <venkyeswar2037@gmail.com>"

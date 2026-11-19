@@ -11,8 +11,9 @@ use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{ConfigureWindowAux, ConnectionExt as _};
 
 
-/// Size used when the window has not been allocated yet. Matches `set_default_size` in popup.rs.
-const DEFAULT_SIZE: (i32, i32) = (420, 540);
+/// Popup size used when the window has not been allocated yet, and the popup's default size
+/// (see `load_saved_size` in popup.rs).
+pub const DEFAULT_SIZE: (i32, i32) = (440, 560);
 
 /// Moves `window` according to `position` ("cursor" or "center"). Other values do nothing.
 pub fn place(window: &gtk::Window, position: &str) {

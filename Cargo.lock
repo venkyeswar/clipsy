@@ -135,6 +135,7 @@ dependencies = [
  "gtk4",
  "libadwaita",
  "libc",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
  "x11rb",

@@ -12,6 +12,7 @@
 
 mod app;
 mod autostart;
+mod clear_dialog;
 mod gnome_install;
 mod gnome_setup;
 mod placement;

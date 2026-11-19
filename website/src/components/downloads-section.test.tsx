@@ -1,4 +1,5 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { DownloadsSection } from "./downloads-section";
 import { useReleases } from "@/hooks/use-releases";
@@ -61,12 +62,28 @@ it("shows_github_link_when_empty", () => {
 });
 
 it("hides_missing_asset_buttons", () => {
-  mockedUseReleases.mockReturnValue({ releases: [older, { ...stable, checksums: undefined, tarball: undefined }], status: "live" });
+  const strippedLatest: Release = { ...stable, tarball: undefined, checksums: undefined };
+  mockedUseReleases.mockReturnValue({ releases: [strippedLatest, older], status: "live" });
   render(<DownloadsSection />);
-  expect(screen.getByRole("link", { name: "Download .deb for 0.4.0" })).toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: /no-sudo tarball for 0\.4\.0/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: /SHA256SUMS for 0\.4\.0/ })).not.toBeInTheDocument();
-  expect(screen.queryByText(/sha256sum -c/)).not.toBeInTheDocument();
+  const block = screen.getByRole("heading", { name: "Clipsy 0.4.0" }).closest("[data-release-block]");
+  expect(block).not.toBeNull();
+  const latestBlock = within(block as HTMLElement);
+  expect(latestBlock.getByRole("link", { name: "Download .deb for 0.4.0" })).toBeInTheDocument();
+  expect(latestBlock.queryByRole("link", { name: /no-sudo tarball/ })).not.toBeInTheDocument();
+  expect(latestBlock.queryByRole("link", { name: /SHA256SUMS/ })).not.toBeInTheDocument();
+  expect(latestBlock.queryByText(/sha256sum -c/)).not.toBeInTheDocument();
+});
+
+it("picker_shows_selected_version_in_trigger", async () => {
+  mockedUseReleases.mockReturnValue({ releases: [stable, older], status: "live" });
+  render(<DownloadsSection />);
+  const trigger = screen.getByRole("button", { name: /choose a version/i });
+  expect(trigger).toHaveTextContent("Version 0.4.0");
+  await userEvent.click(trigger);
+  await userEvent.click(await screen.findByRole("menuitem", { name: "Clipsy 0.3.1" }));
+  expect(screen.getByRole("button", { name: /choose a version/i })).toHaveTextContent("Version 0.3.1");
+  const block = screen.getByRole("heading", { name: "Clipsy 0.3.1" }).closest("[data-release-block]");
+  expect(block).not.toBeNull();
 });
 
 it("marks_prerelease_with_badge", () => {

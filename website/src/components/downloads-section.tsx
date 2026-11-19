@@ -64,7 +64,10 @@ function ReleaseBlock({ release, isLatest }: { release: Release; isLatest: boole
   const date = formatDate(release.date);
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5 text-card-foreground sm:p-6">
+    <div
+      data-release-block
+      className="rounded-xl border border-border bg-card p-5 text-card-foreground sm:p-6"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-heading text-xl font-semibold tracking-tight">Clipsy {version}</h3>
         {isLatest && <Badge variant="secondary">Latest</Badge>}
@@ -200,7 +203,7 @@ export function DownloadsSection() {
           "Showing the last saved release list because GitHub could not be reached."}
       </div>
 
-      <div className="mt-4">
+      <div aria-live="polite" className="mt-4">
         {shown ? (
           <ReleaseBlock release={shown} isLatest={shown.tag === latest?.tag} />
         ) : (
@@ -218,7 +221,8 @@ export function DownloadsSection() {
           <div className="md:hidden">
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="outline" className="h-11 px-4" />}>
-                Choose a version
+                {shown && <span className="sr-only">Choose a version: </span>}
+                {shown ? `Version ${shown.version}` : "Choose a version"}
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {releases.map((release) => (

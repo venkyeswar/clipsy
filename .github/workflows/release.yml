@@ -50,14 +50,22 @@ jobs:
   deb:
     needs: version
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
       - name: Install system libraries
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential pkg-config libgtk-4-dev libadwaita-1-dev libx11-dev
+          for attempt in 1 2 3 4; do
+            if sudo apt-get update -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 \
+               && sudo apt-get install -y --no-install-recommends -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 \
+                  build-essential pkg-config libgtk-4-dev libadwaita-1-dev libx11-dev; then
+              break
+            fi
+            if [ "$attempt" = 4 ]; then echo "::error::apt failed after 4 attempts"; exit 1; fi
+            echo "apt failed (attempt $attempt), retrying in $((attempt * 20))s"
+            sleep $((attempt * 20))
+          done
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

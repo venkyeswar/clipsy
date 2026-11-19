@@ -21,6 +21,7 @@ tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
 clipsy-backends = { path = "../clipsy-backends" }
+slint = "1"
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_System_DataExchange",
@@ -39,7 +40,6 @@ windows = { version = "0.58", features = [
     "Win32_UI_Shell",
     "Win32_Graphics_Gdi",
 ] }
-slint = "1"
 tray-icon = "0.19"
 winreg = "0.52"
 

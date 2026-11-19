@@ -218,6 +218,8 @@ pub struct GnomeBackend {
     inner: Arc<Inner>,
     listener: Option<UnixListener>,
     socket_path: PathBuf,
+    /// Extra terminal classes from the config, sent with every paste.
+    terminal_apps: Mutex<Vec<String>>,
 }
 
 impl GnomeBackend {
@@ -248,6 +250,7 @@ impl GnomeBackend {
             }),
             listener: Some(listener),
             socket_path,
+            terminal_apps: Mutex::new(Vec::new()),
         })
     }
 
@@ -332,11 +335,17 @@ impl Backend for GnomeBackend {
             PasteMode::Normal => "normal",
             PasteMode::Terminal => "terminal",
         };
-        self.inner.send(&json!({"type": "paste", "mode": mode}))
+        let terminal_apps = self.terminal_apps.lock().unwrap_or_else(PoisonError::into_inner).clone();
+        // Older extensions ignore `terminal_apps`.
+        self.inner.send(&json!({"type": "paste", "mode": mode, "terminal_apps": terminal_apps}))
     }
 
     fn supports_paste(&self) -> bool {
         self.inner.is_connected()
+    }
+
+    fn set_terminal_apps(&self, apps: &[String]) {
+        *self.terminal_apps.lock().unwrap_or_else(PoisonError::into_inner) = apps.to_vec();
     }
 
     fn register_hotkey(&mut self, action: HotkeyAction, accel: &str) -> Result<()> {
@@ -480,7 +489,18 @@ mod tests {
         b.paste(PasteMode::Terminal).unwrap();
         l.clear();
         lines.read_line(&mut l).unwrap();
-        assert_eq!(serde_json::from_str::<Value>(&l).unwrap(), json!({"type":"paste","mode":"terminal"}));
+        assert_eq!(
+            serde_json::from_str::<Value>(&l).unwrap(),
+            json!({"type":"paste","mode":"terminal","terminal_apps":[]})
+        );
+        b.set_terminal_apps(&["Code".to_string()]);
+        b.paste(PasteMode::Normal).unwrap();
+        l.clear();
+        lines.read_line(&mut l).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&l).unwrap(),
+            json!({"type":"paste","mode":"normal","terminal_apps":["Code"]})
+        );
 
         drop(lines);
         drop(client);

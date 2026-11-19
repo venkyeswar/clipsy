@@ -588,6 +588,8 @@ impl Popup {
         glib::timeout_add_local(PASTE_DELAY, move || {
             let backend = state.backend.borrow();
             if backend.supports_paste() {
+                // Read the list at paste time, so a changed config is always used.
+                backend.set_terminal_apps(&state.config.borrow().general.terminal_apps);
                 if let Err(err) = backend.paste(PasteMode::Normal) {
                     tracing::warn!("auto-paste failed: {err:#}");
                 }

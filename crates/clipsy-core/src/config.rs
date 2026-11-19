@@ -37,6 +37,10 @@ pub struct General {
     pub keep_days: u32,
     /// The same for pinned items, which usually get a longer time. 0 keeps them forever.
     pub keep_pinned_days: u32,
+    /// Extra apps that paste with Ctrl+Shift+V like a terminal, by window class
+    /// (case does not matter), e.g. `["Code"]` for the VS Code terminal. Known
+    /// terminals are detected without this.
+    pub terminal_apps: Vec<String>,
 }
 
 impl Default for General {
@@ -53,6 +57,7 @@ impl Default for General {
             paste_on_select: true,
             keep_days: 2,
             keep_pinned_days: 10,
+            terminal_apps: Vec::new(),
         }
     }
 }
@@ -280,5 +285,17 @@ mod tests {
         assert_eq!(cfg.general.max_items, 7);
         assert_eq!(cfg.general.max_total_mb, 500);
         assert_eq!(cfg.appearance.theme, "system");
+    }
+
+    #[test]
+    fn terminal_apps_default_empty_and_parse() {
+        assert!(Config::default().general.terminal_apps.is_empty());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        // An older config without the field still loads.
+        fs::write(&path, "[general]\nmax_items = 7\n").unwrap();
+        assert!(Config::load_from(&path).general.terminal_apps.is_empty());
+        fs::write(&path, "[general]\nterminal_apps = [\"Code\", \"my-term\"]\n").unwrap();
+        assert_eq!(Config::load_from(&path).general.terminal_apps, ["Code", "my-term"]);
     }
 }

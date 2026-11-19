@@ -26,6 +26,9 @@ pub trait Backend: Send {
     /// `appearance.popup_position` ("cursor" or "center"). The GNOME backend asks
     /// the Shell extension to place and focus the popup; X11 does nothing here.
     fn popup_will_show(&self, _position: &str) {}
+    /// Extra window classes (config `general.terminal_apps`) that `paste` treats as
+    /// terminals, on top of the built-in list. Matched exactly, ignoring case.
+    fn set_terminal_apps(&self, _apps: &[String]) {}
     /// Setup the user still has to do before this backend fully works, if any.
     fn setup_needed(&self) -> Option<SetupNeeded> {
         None

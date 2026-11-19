@@ -340,9 +340,12 @@ fn parse_accel(accel: &str) -> Result<(u16, u32)> {
     Ok((mods | extra, keysym))
 }
 
-fn is_terminal(class: &str) -> bool {
+/// True for a known terminal's window class, or one the user listed in `extra`.
+fn is_terminal(class: &str, extra: &[String]) -> bool {
     let class = class.trim().to_ascii_lowercase();
-    TERMINAL_EXACT.contains(&class.as_str()) || TERMINAL_SUBSTRINGS.iter().any(|t| class.contains(t))
+    TERMINAL_EXACT.contains(&class.as_str())
+        || TERMINAL_SUBSTRINGS.iter().any(|t| class.contains(t))
+        || extra.iter().any(|e| e.trim().eq_ignore_ascii_case(&class))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -702,6 +705,8 @@ pub struct X11Backend {
     root: Window,
     bindings: Arc<Mutex<Vec<Binding>>>,
     active: Mutex<Option<Window>>,
+    /// Extra terminal classes from the config.
+    terminal_apps: Mutex<Vec<String>>,
     owners: Owners,
     started: bool,
 }
@@ -719,6 +724,7 @@ impl X11Backend {
             root,
             bindings: Arc::new(Mutex::new(Vec::new())),
             active: Mutex::new(None),
+            terminal_apps: Mutex::new(Vec::new()),
             owners: Arc::new(Mutex::new(HashSet::new())),
             started: false,
         })
@@ -880,7 +886,10 @@ impl Backend for X11Backend {
     fn paste(&self, mode: PasteMode) -> Result<()> {
         let win = *self.active.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let class = win.and_then(|w| source_app(&self.ctl, self.root, w));
-        let is_term = mode == PasteMode::Terminal || class.as_deref().is_some_and(is_terminal);
+        let is_term = mode == PasteMode::Terminal
+            || class.as_deref().is_some_and(|c| {
+                is_terminal(c, &self.terminal_apps.lock().unwrap_or_else(std::sync::PoisonError::into_inner))
+            });
 
         // Keys are only sent once the remembered window is really active again: before
         // that they would go to the popup (still unmapping) or to whatever window the
@@ -931,6 +940,10 @@ impl Backend for X11Backend {
 
     fn supports_paste(&self) -> bool {
         true
+    }
+
+    fn set_terminal_apps(&self, apps: &[String]) {
+        *self.terminal_apps.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = apps.to_vec();
     }
 
     fn register_hotkey(&mut self, action: HotkeyAction, accel: &str) -> Result<()> {
@@ -1094,7 +1107,7 @@ mod tests {
 
     #[test]
     fn is_terminal_matches_warp() {
-        assert!(is_terminal("dev.warp.Warp"));
+        assert!(is_terminal("dev.warp.Warp", &[]));
     }
 
     #[test]
@@ -1119,7 +1132,7 @@ mod tests {
             "terminology",
             "cool-retro-term",
         ] {
-            assert!(is_terminal(class), "expected {class:?} to be a terminal");
+            assert!(is_terminal(class, &[]), "expected {class:?} to be a terminal");
         }
     }
 
@@ -1128,8 +1141,18 @@ mod tests {
         for class in ["st", "st-256color", "foot", "footclient", "tabby", "Hyper", "contour", "rio", "Warp",
             "com.raggesilver.BlackBox", "Tilda"]
         {
-            assert!(is_terminal(class), "expected {class:?} to be a terminal");
+            assert!(is_terminal(class, &[]), "expected {class:?} to be a terminal");
         }
+    }
+
+    #[test]
+    fn is_terminal_uses_user_list_exactly() {
+        let extra = vec!["Code".to_string(), " my-term ".to_string()];
+        assert!(is_terminal("code", &extra));
+        assert!(is_terminal("Code", &extra));
+        assert!(is_terminal("MY-TERM", &extra));
+        assert!(!is_terminal("code-insiders", &extra));
+        assert!(!is_terminal("Code", &[]));
     }
 
     #[test]
@@ -1151,7 +1174,7 @@ mod tests {
             "org.gnome.TextEditor",
             "",
         ] {
-            assert!(!is_terminal(class), "expected {class:?} not to be a terminal");
+            assert!(!is_terminal(class, &[]), "expected {class:?} not to be a terminal");
         }
     }
 

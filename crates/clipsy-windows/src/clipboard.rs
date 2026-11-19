@@ -7,6 +7,7 @@
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::mpsc::Sender;
+use std::sync::OnceLock;
 
 use anyhow::{anyhow, bail, Context, Result};
 use clipsy_core::{ClipEvent, Format};
@@ -29,10 +30,30 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::formats::{build_event, RawClip};
-use crate::util::retry;
+use crate::util::{cut_at_nul, dword_is_zero, percent_decode, retry};
 
 /// Largest clipboard payload we copy out of another process (guards against huge allocations).
 const MAX_PAYLOAD: usize = 256 * 1024 * 1024;
+
+/// Registered clipboard format ids, looked up once per process.
+struct FormatIds {
+    png: u32,
+    html: u32,
+    exclude_monitor: u32,
+    history_disallowed: u32,
+    cloud_disallowed: u32,
+}
+
+fn format_ids() -> &'static FormatIds {
+    static IDS: OnceLock<FormatIds> = OnceLock::new();
+    IDS.get_or_init(|| FormatIds {
+        png: format_id("PNG"),
+        html: format_id("HTML Format"),
+        exclude_monitor: format_id("ExcludeClipboardContentFromMonitorProcessing"),
+        history_disallowed: format_id("CanIncludeInClipboardHistory"),
+        cloud_disallowed: format_id("CanUploadToCloudClipboard"),
+    })
+}
 
 /// Sequence number of our own last clipboard write, or -1 when there is none pending.
 static OWN_WRITE_SEQ: AtomicI64 = AtomicI64::new(-1);
@@ -70,15 +91,22 @@ pub fn write_formats(formats: &[Format]) -> Result<()> {
     let payloads = clipboard_payloads(formats)?;
     // A null owner: the clipboard is written without an owner window.
     let open = open_clipboard(HWND(std::ptr::null_mut()))?;
-    // SAFETY: the clipboard is open on this thread (guaranteed by `open`).
-    unsafe { EmptyClipboard() }.context("EmptyClipboard")?;
-    for (format, bytes) in &payloads {
-        set_clipboard_bytes(*format, bytes)?;
-    }
-    // Mark while still open: WM_CLIPBOARDUPDATE is only delivered after CloseClipboard, so the
-    // listener cannot see our write before this mark is stored.
+    let result = fill_clipboard(&payloads);
+    // Mark even after a partial write: whatever did land is still our write, and the listener
+    // must not record it as a new history item. Assumption: WM_CLIPBOARDUPDATE is posted only
+    // after CloseClipboard, and mark_own_write runs while the clipboard is still open.
     mark_own_write();
     drop(open);
+    result
+}
+
+/// Empty the clipboard and hand it every payload. The caller must hold the clipboard open.
+fn fill_clipboard(payloads: &[(u32, Vec<u8>)]) -> Result<()> {
+    // SAFETY: the clipboard is open on this thread (the caller holds it).
+    unsafe { EmptyClipboard() }.context("EmptyClipboard")?;
+    for (format, bytes) in payloads {
+        set_clipboard_bytes(*format, bytes)?;
+    }
     Ok(())
 }
 
@@ -195,19 +223,27 @@ fn handle_update(owner: HWND) {
 /// Read every format we care about. The clipboard is opened for the duration of the call.
 fn read_clipboard(owner: HWND) -> Result<RawClip> {
     let _open = open_clipboard(owner)?;
+    let ids = format_ids();
 
-    let history_flag = read_format(format_id("CanIncludeInClipboardHistory"))
-        .map(|b| u32_at(&b, 0) == Some(0))
-        .unwrap_or(false);
+    // A DWORD of 0 in either opt-out format means the copier does not want this in history or
+    // in the cloud clipboard. Both count as sensitive, like the monitor-exclusion flag.
+    let opted_out = |format: u32| read_format(format).is_some_and(|b| dword_is_zero(&b));
+    let history_disallowed = opted_out(ids.history_disallowed) || opted_out(ids.cloud_disallowed);
+
+    let png = read_format(ids.png);
+    // CF_DIB is only needed when there is no PNG to use instead.
+    let dib = if png.is_none() { read_format(u32::from(CF_DIB.0)) } else { None };
 
     Ok(RawClip {
-        unicode_text: read_format(u32::from(CF_UNICODETEXT.0)).map(|b| utf16_units(&b)),
-        png: read_format(format_id("PNG")),
-        dib: read_format(u32::from(CF_DIB.0)),
-        html: read_format(format_id("HTML Format")),
+        // GlobalSize is the allocation size, so the text may be followed by slack after its NUL.
+        unicode_text: read_format(u32::from(CF_UNICODETEXT.0))
+            .map(|b| cut_at_nul(&utf16_units(&b)).to_vec()),
+        png,
+        dib,
+        html: read_format(ids.html),
         files: read_format(u32::from(CF_HDROP.0)).map(|b| parse_dropfiles(&b)).unwrap_or_default(),
-        exclude_flag: format_available(format_id("ExcludeClipboardContentFromMonitorProcessing")),
-        history_disallowed: history_flag,
+        exclude_flag: format_available(ids.exclude_monitor),
+        history_disallowed,
         source_exe: source_exe_name(),
     })
 }
@@ -327,16 +363,20 @@ fn clipboard_payloads(formats: &[Format]) -> Result<Vec<(u32, Vec<u8>)>> {
     let mut seen_html = false;
     let mut seen_files = false;
     for f in formats {
+        // Empty data would make GlobalAlloc(0); there is nothing useful to put on the clipboard.
+        if f.data.is_empty() {
+            continue;
+        }
         let base = base_mime(&f.mime);
         if base == "text/plain" && !seen_text {
             seen_text = true;
             out.push((u32::from(CF_UNICODETEXT.0), utf16_nul_bytes(&String::from_utf8_lossy(&f.data))));
         } else if base == "image/png" && !seen_png {
             seen_png = true;
-            push_registered(&mut out, "PNG", f.data.clone());
+            push_registered(&mut out, format_ids().png, f.data.clone());
         } else if base == "text/html" && !seen_html {
             seen_html = true;
-            push_registered(&mut out, "HTML Format", build_cf_html(&f.data));
+            push_registered(&mut out, format_ids().html, build_cf_html(&f.data));
         } else if base == "text/uri-list" && !seen_files {
             let paths: Vec<String> = uri_list_to_paths(&f.data);
             if !paths.is_empty() {
@@ -351,8 +391,7 @@ fn clipboard_payloads(formats: &[Format]) -> Result<Vec<(u32, Vec<u8>)>> {
     Ok(out)
 }
 
-fn push_registered(out: &mut Vec<(u32, Vec<u8>)>, name: &str, bytes: Vec<u8>) {
-    let id = format_id(name);
+fn push_registered(out: &mut Vec<(u32, Vec<u8>)>, id: u32, bytes: Vec<u8>) {
     if id != 0 {
         out.push((id, bytes));
     }
@@ -510,26 +549,6 @@ fn uri_to_path(uri: &str) -> Option<String> {
     })
 }
 
-/// Decode `%XX` escapes as UTF-8 bytes. Malformed escapes are kept as written.
-fn percent_decode(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok();
-            if let Some(byte) = hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
-                out.push(byte);
-                i += 3;
-                continue;
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
 /// MIME type without parameters, lower case (`Text/Plain; charset=utf-8` -> `text/plain`).
 fn base_mime(mime: &str) -> String {
     mime.split(';').next().unwrap_or("").trim().to_ascii_lowercase()
@@ -584,13 +603,6 @@ mod tests {
     fn uri_list_skips_comments_and_non_file_uris() {
         let body = b"# comment\r\nhttps://example.com/x\r\nfile:///C:/a.txt\r\n";
         assert_eq!(uri_list_to_paths(body), vec![r"C:\a.txt".to_string()]);
-    }
-
-    #[test]
-    fn percent_decode_handles_malformed_escapes() {
-        assert_eq!(percent_decode("a%20b"), "a b");
-        assert_eq!(percent_decode("100%"), "100%");
-        assert_eq!(percent_decode("x%zz"), "x%zz");
     }
 
     #[test]

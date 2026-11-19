@@ -20,7 +20,7 @@ pub struct RawClip {
     pub files: Vec<String>,
     /// ExcludeClipboardContentFromMonitorProcessing or similar secret marker.
     pub exclude_flag: bool,
-    /// CanIncludeInClipboardHistory = 0 (Windows clipboard history opt-out).
+    /// CanIncludeInClipboardHistory = 0 or CanUploadToCloudClipboard = 0 (Windows opt-outs).
     pub history_disallowed: bool,
     /// Executable name of the app that owns the clipboard, e.g. `chrome.exe`.
     pub source_exe: Option<String>,

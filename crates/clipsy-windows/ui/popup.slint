@@ -1,0 +1,271 @@
+// The clipboard history popup. All logic lives in src/popup.rs; this file only lays out
+// the window and reports key presses and clicks back to Rust.
+
+export struct RowData {
+    preview: string,
+    kind: string,
+    pinned: bool,
+    source: string,
+    has-thumb: bool,
+    thumb: image,
+}
+
+// One filter tab. Rust maps the index it reports (0 = All ... 4 = Pinned).
+component FilterTab inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    in property <color> accent;
+    in property <color> muted-color;
+    callback clicked();
+
+    height: 28px;
+    border-radius: 6px;
+    background: root.active ? root.accent : transparent;
+    Text {
+        text: root.label;
+        font-size: 13px;
+        color: root.active ? white : root.muted-color;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+export component ClipPopup inherits Window {
+    title: "Clipsy popup";
+    no-frame: true;
+    always-on-top: true;
+    width: 420px;
+    height: 520px;
+
+    in property <[RowData]> rows;
+    in-out property <int> selected: 0;
+    in-out property <string> query;
+    in property <int> filter-index: 0;
+    in property <bool> dark: false;
+    in property <bool> compact: false;
+
+    // Rust owns the selection: keys ask for a move, and Rust sets `selected` back.
+    callback query-edited(string);
+    callback filter-picked(int);
+    callback move-selection(int);
+    callback activate(int, bool);
+    callback pin-toggled(int);
+    callback hide-requested();
+
+    property <color> bg: root.dark ? #202124 : #ffffff;
+    property <color> fg: root.dark ? #f1f3f4 : #202124;
+    property <color> muted: root.dark ? #9aa0a6 : #5f6368;
+    property <color> field-bg: root.dark ? #2d2e31 : #f1f3f4;
+    property <color> row-selected: root.dark ? #3c4043 : #d3e3fd;
+    property <color> accent: #3584e4;
+    property <length> row-height: root.compact ? 34px : 50px;
+    // Gap between rows; the VerticalLayout below uses the same value.
+    property <length> row-gap: 2px;
+
+    background: root.bg;
+
+    // Scroll the list so the row at `index` is fully visible.
+    function scroll-to-row(index: int) {
+        if (index < 0 || index >= root.rows.length) {
+            return;
+        }
+        let top = root.row-height * index + root.row-gap * index;
+        let bottom = top + root.row-height;
+        if (bottom > -list-view.content-y + list-view.height) {
+            list-view.content-y = -(bottom - list-view.height);
+        }
+        if (top < -list-view.content-y) {
+            list-view.content-y = -top;
+        }
+    }
+
+    changed selected => {
+        root.scroll-to-row(root.selected);
+    }
+    // A new result list starts at the top.
+    changed rows => {
+        list-view.content-y = 0px;
+    }
+
+    forward-focus: search;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        search := TextInput {
+            text <=> root.query;
+            font-size: 15px;
+            color: root.fg;
+            height: 36px;
+            single-line: true;
+            edited => {
+                root.query-edited(self.text);
+            }
+            key-pressed(event) => {
+                if (event.text == Key.UpArrow) {
+                    root.move-selection(-1);
+                    return accept;
+                }
+                if (event.text == Key.DownArrow) {
+                    root.move-selection(1);
+                    return accept;
+                }
+                if (event.text == Key.Return) {
+                    root.activate(root.selected, event.modifiers.shift);
+                    return accept;
+                }
+                if (event.text == Key.Escape) {
+                    root.hide-requested();
+                    return accept;
+                }
+                return reject;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 4px;
+            FilterTab {
+                label: "All";
+                active: root.filter-index == 0;
+                accent: root.accent;
+                muted-color: root.muted;
+                clicked => { root.filter-picked(0); }
+            }
+            FilterTab {
+                label: "Text";
+                active: root.filter-index == 1;
+                accent: root.accent;
+                muted-color: root.muted;
+                clicked => { root.filter-picked(1); }
+            }
+            FilterTab {
+                label: "Images";
+                active: root.filter-index == 2;
+                accent: root.accent;
+                muted-color: root.muted;
+                clicked => { root.filter-picked(2); }
+            }
+            FilterTab {
+                label: "Files";
+                active: root.filter-index == 3;
+                accent: root.accent;
+                muted-color: root.muted;
+                clicked => { root.filter-picked(3); }
+            }
+            FilterTab {
+                label: "Pinned";
+                active: root.filter-index == 4;
+                accent: root.accent;
+                muted-color: root.muted;
+                clicked => { root.filter-picked(4); }
+            }
+        }
+
+        // The Rectangle clips the scrolling list to the space left under the tabs.
+        Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            list-view := Flickable {
+                width: parent.width;
+                height: parent.height;
+                content-width: self.width;
+                content-height: root.rows.length * root.row-height + root.rows.length * root.row-gap;
+
+                list-box := VerticalLayout {
+                    width: parent.width;
+                    spacing: root.row-gap;
+
+                    for row[index] in root.rows: Rectangle {
+                        height: root.row-height;
+                        border-radius: 6px;
+                        background: index == root.selected ? root.row-selected : transparent;
+
+                        // Kind label, or the image thumbnail for image items.
+                        Rectangle {
+                            x: 8px;
+                            y: 6px;
+                            width: 36px;
+                            height: parent.height - 12px;
+                            border-radius: 4px;
+                            background: root.field-bg;
+                            if (row.has-thumb): Image {
+                                width: parent.width - 4px;
+                                height: parent.height - 4px;
+                                source: row.thumb;
+                                image-fit: contain;
+                            }
+                            if (!row.has-thumb): Text {
+                                text: row.kind == "image" ? "IMG" : row.kind == "files" ? "FILE" : row.kind == "html" ? "HTML" : "TXT";
+                                font-size: 9px;
+                                color: root.muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        Text {
+                            x: 54px;
+                            width: parent.width - 124px;
+                            text: row.preview;
+                            color: root.fg;
+                            font-size: 13px;
+                            overflow: elide;
+                            wrap: no-wrap;
+                            vertical-alignment: center;
+                        }
+
+                        // Source app label, under the preview (normal row height only).
+                        if (!root.compact && row.source != ""): Text {
+                            x: 54px;
+                            y: parent.height - 18px;
+                            width: parent.width - 124px;
+                            text: row.source;
+                            color: root.muted;
+                            font-size: 10px;
+                            overflow: elide;
+                            wrap: no-wrap;
+                        }
+
+                        Text {
+                            x: parent.width - 66px;
+                            width: 20px;
+                            height: parent.height;
+                            text: row.pinned ? "★" : "☆";
+                            color: row.pinned ? root.accent : root.muted;
+                            font-size: 14px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            x: parent.width - 70px;
+                            width: 32px;
+                            height: parent.height;
+                            clicked => { root.pin-toggled(index); }
+                        }
+
+                        TouchArea {
+                            x: 0;
+                            width: parent.width - 70px;
+                            height: parent.height;
+                            clicked => { root.activate(index, false); }
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            visible: root.rows.length == 0;
+            text: root.query == "" ? "Nothing copied yet" : "No matches";
+            color: root.muted;
+            font-size: 13px;
+            horizontal-alignment: center;
+            height: 40px;
+        }
+    }
+}

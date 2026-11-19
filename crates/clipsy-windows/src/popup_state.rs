@@ -65,6 +65,20 @@ impl PopupState {
     }
 }
 
+/// Move a popup's top-left corner so the whole popup lies inside `area`.
+///
+/// `area` is (left, top, right, bottom). When the popup is larger than the area, it is aligned
+/// to the area's left and top edges.
+pub fn clamp_to_area(pos: (i32, i32), size: (i32, i32), area: (i32, i32, i32, i32)) -> (i32, i32) {
+    let (left, top, right, bottom) = area;
+    let (width, height) = size;
+    // Largest top-left that still keeps the popup's right/bottom edge inside the area. `min`
+    // then `max` means an oversized popup (max < left/top) ends up at the left/top edge.
+    let x = pos.0.min(right - width).max(left);
+    let y = pos.1.min(bottom - height).max(top);
+    (x, y)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,5 +173,30 @@ mod tests {
         s.set_filter(Filter::Text);
         assert_eq!(s.filter, Filter::Text);
         assert_eq!(s.selected, 0);
+    }
+
+    #[test]
+    fn clamp_keeps_inside_right_bottom() {
+        // Popup 420x520 near the bottom-right corner of a 1000x800 work area.
+        let got = clamp_to_area((900, 700), (420, 520), (0, 0, 1000, 800));
+        assert_eq!(got, (580, 280));
+    }
+
+    #[test]
+    fn clamp_keeps_inside_left_top() {
+        let got = clamp_to_area((-50, -20), (420, 520), (0, 0, 1000, 800));
+        assert_eq!(got, (0, 0));
+    }
+
+    #[test]
+    fn clamp_leaves_inside_position_unchanged() {
+        let got = clamp_to_area((100, 200), (420, 520), (0, 0, 1000, 800));
+        assert_eq!(got, (100, 200));
+    }
+
+    #[test]
+    fn clamp_oversized_popup_aligns_to_top_left() {
+        assert_eq!(clamp_to_area((50, 50), (420, 520), (0, 0, 300, 200)), (0, 0));
+        assert_eq!(clamp_to_area((500, 500), (420, 520), (10, 20, 310, 220)), (10, 20));
     }
 }

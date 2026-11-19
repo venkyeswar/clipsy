@@ -87,13 +87,17 @@ mod window {
 
     impl SettingsWindow {
         /// Builds the window. `on_saved` runs after a successful Save, before the window hides.
+        /// `on_clear` runs when "Clear history..." is clicked (the app asks for the confirm dialog).
         pub fn new(
             config: Rc<RefCell<Config>>,
             backend: Rc<WindowsBackend>,
             on_saved: impl Fn() + 'static,
+            on_clear: impl Fn() + 'static,
         ) -> Result<Self> {
             let dialog = SettingsDialog::new()?;
             let on_saved: Rc<dyn Fn()> = Rc::new(on_saved);
+
+            dialog.on_clear_history_requested(on_clear);
 
             // Weak handles: the dialog owns these closures, so a strong handle would form a cycle.
             let weak = dialog.as_weak();

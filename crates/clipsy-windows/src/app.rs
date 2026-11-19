@@ -19,6 +19,7 @@ use slint::{Timer, TimerMode};
 
 use crate::autostart;
 use crate::backend::WindowsBackend;
+use crate::clear_dialog::confirm_and_clear;
 use crate::hotkey::{migrate_toggle_default, shortcut_label, tray_tooltip, FALLBACK, WINDOWS_DEFAULT};
 use crate::popup::Popup;
 use crate::settings::SettingsWindow;
@@ -222,6 +223,7 @@ pub fn run(args: Vec<String>) -> Result<()> {
         popup,
         tray,
         settings: RefCell::new(None),
+        verb_tx,
         inbox: Inbox {
             clips: clip_rx,
             hotkeys: hotkey_rx,
@@ -286,6 +288,9 @@ struct App {
     tray: Rc<Tray>,
     /// Created the first time Settings is opened, then reused.
     settings: RefCell<Option<SettingsWindow>>,
+    /// Sends verbs to this same loop. The Settings window's Clear button uses it, so it runs
+    /// the same path as the tray and the popup.
+    verb_tx: mpsc::Sender<Verb>,
     inbox: Inbox,
 }
 
@@ -384,13 +389,12 @@ impl App {
         tracing::info!("clipboard recording {}", if paused { "paused" } else { "resumed" });
     }
 
-    /// Deletes history. Pinned items are kept.
+    /// Clears history after the user confirms in the dialog. Pinned items are kept unless the
+    /// dialog's "Also remove pinned" is ticked. Every clear path (popup, tray, hotkey,
+    /// Settings, CLI) comes through here.
     fn clear_history(&self) {
-        let cleared = self.store.borrow().clear(true);
-        if let Err(e) = cleared {
-            tracing::warn!("could not clear history: {e:#}");
-        }
-        self.popup.refresh();
+        let popup = self.popup.clone();
+        confirm_and_clear(self.store.clone(), move || popup.refresh());
     }
 
     fn show_settings(&self) {
@@ -409,7 +413,11 @@ impl App {
                 tray.set_tooltip(&tray_tooltip(backend.bound_toggle().as_deref()));
                 popup.refresh();
             };
-            match SettingsWindow::new(self.config.clone(), self.backend.clone(), on_saved) {
+            let clear_verbs = self.verb_tx.clone();
+            let on_clear = move || {
+                let _ = clear_verbs.send(Verb::Clear);
+            };
+            match SettingsWindow::new(self.config.clone(), self.backend.clone(), on_saved, on_clear) {
                 Ok(window) => *slot = Some(window),
                 Err(e) => {
                     tracing::warn!("could not create the settings window: {e:#}");

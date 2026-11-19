@@ -61,6 +61,7 @@ export component SettingsDialog inherits Window {
     callback shortcut-edited(string);
     callback save-requested();
     callback cancel-requested();
+    callback clear-history-requested();
 
     // Colours follow the system palette so both light and dark mode stay readable.
     property <color> error-color: Palette.color-scheme == ColorScheme.dark ? #ff8a75 : #c01c28;
@@ -212,6 +213,13 @@ export component SettingsDialog inherits Window {
                         CheckBox {
                             text: "Clear history when Clipsy quits";
                             checked <=> root.clear-on-exit;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: "Clear history…";
+                                clicked => { root.clear-history-requested(); }
+                            }
                         }
                     }
                 }

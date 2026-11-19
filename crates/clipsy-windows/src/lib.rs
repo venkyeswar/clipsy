@@ -12,6 +12,7 @@ pub mod util;
 #[cfg(windows)]
 pub mod app;
 pub mod autostart;
+pub mod clear_dialog;
 #[cfg(windows)]
 pub mod backend;
 #[cfg(windows)]

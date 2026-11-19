@@ -22,6 +22,7 @@ on:
       - 'Cargo.lock'
       - 'packaging/windows/**'
       - '.github/workflows/ci-windows.yml'
+  workflow_dispatch:
 
 jobs:
   windows:
@@ -44,3 +45,27 @@ jobs:
 
       - name: Clippy clipsy-windows
         run: cargo clippy -p clipsy-windows --all-targets -- -D warnings
+
+      - name: Build the release clipsy.exe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo build --release -p clipsy-windows
+          if ($LASTEXITCODE -ne 0) { throw "cargo build failed with exit code $LASTEXITCODE" }
+
+      - name: Copy clipsy.exe to dist
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
+          # Same name users get in the release: clipsy.exe, not clipsy-windows.exe.
+          Copy-Item 'target\release\clipsy-windows.exe' 'dist\clipsy.exe'
+          if (-not (Test-Path 'dist\clipsy.exe')) { throw "dist\clipsy.exe was not created" }
+
+      - name: Upload the test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: clipsy-windows-test
+          path: dist/clipsy.exe
+          if-no-files-found: error
+          retention-days: 3

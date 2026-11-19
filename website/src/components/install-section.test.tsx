@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { InstallSection } from "./install-section";
@@ -65,13 +65,14 @@ it("deb_tab_shows_releases_button_when_no_deb", async () => {
   expect(screen.queryByText(/^wget /)).not.toBeInTheDocument();
 });
 
-it("nosudo_tab_shows_releases_button_when_no_tarball", async () => {
-  mockedUseReleases.mockReturnValue({ releases: [{ ...release, tarball: undefined }], status: "live" });
+it("nosudo_tab_never_shows_releases_fallback", async () => {
+  mockedUseReleases.mockReturnValue({ releases: [{ ...release, deb: undefined }], status: "live" });
   render(<InstallSection />);
   await userEvent.click(screen.getByRole("tab", { name: "No sudo" }));
-  expect(screen.getByRole("link", { name: "View releases on GitHub" })).toBeInTheDocument();
-  expect(screen.queryByText(/^wget /)).not.toBeInTheDocument();
-  expect(screen.queryByText(/tar -xzf/)).not.toBeInTheDocument();
+  const panel = screen.getByRole("tabpanel");
+  expect(within(panel).queryByRole("link", { name: "View releases on GitHub" })).not.toBeInTheDocument();
+  expect(within(panel).getByText("sh install.sh")).toBeInTheDocument();
+  expect(within(panel).queryByText(/tar -xzf/)).not.toBeInTheDocument();
 });
 
 it("shows_skeleton_not_fallback_while_loading", async () => {
@@ -81,8 +82,47 @@ it("shows_skeleton_not_fallback_while_loading", async () => {
   expect(screen.queryByText(/No .deb package is published/)).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "View releases on GitHub" })).not.toBeInTheDocument();
   expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
+  expect(screen.getByText("Download the package")).toBeInTheDocument();
+});
 
+it("nosudo_tab_shows_numbered_steps_and_commands_while_loading", async () => {
+  mockedUseReleases.mockReturnValue({ releases: [], status: "loading" });
+  render(<InstallSection />);
   await userEvent.click(screen.getByRole("tab", { name: "No sudo" }));
-  expect(screen.queryByText(/No no-sudo package/)).not.toBeInTheDocument();
-  expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
+  const panel = screen.getByRole("tabpanel");
+  expect(panel.querySelector('[data-slot="skeleton"]')).not.toBeInTheDocument();
+  const steps = within(panel).getByRole("list", { name: "Steps for No sudo" });
+  expect(steps.tagName).toBe("OL");
+  const items = within(steps).getAllByRole("listitem");
+  expect(items.map((item) => item.querySelector("p")?.textContent)).toEqual([
+    "Download the installer",
+    "Run it",
+    "Start Clipsy",
+  ]);
+  expect(
+    within(items[0]).getByText(
+      "curl -fsSL https://github.com/venkyeswar/clipsy/releases/latest/download/install.sh -o install.sh",
+    ),
+  ).toBeInTheDocument();
+  expect(within(items[1]).getByText("sh install.sh")).toBeInTheDocument();
+  expect(within(items[2]).getByText("~/.local/bin/clipsy")).toBeInTheDocument();
+  expect(within(panel).getByText("sh ~/.local/share/clipsy/uninstall.sh")).toBeInTheDocument();
+  expect(within(panel).getAllByRole("button", { name: "Copy command" })).toHaveLength(4);
+});
+
+it("deb_tab_shows_numbered_steps_with_release_commands", async () => {
+  mockedUseReleases.mockReturnValue({ releases: [release], status: "live" });
+  render(<InstallSection />);
+  await userEvent.click(screen.getByRole("tab", { name: ".deb package" }));
+  const steps = screen.getByRole("list", { name: "Steps for .deb package" });
+  expect(within(steps).getByText("wget https://example.test/clipsy.deb")).toBeInTheDocument();
+  expect(within(steps).getByText("sudo apt install ./clipsy_0.4.0_amd64.deb")).toBeInTheDocument();
+  expect(within(steps).getAllByRole("listitem").at(-1)).toHaveTextContent("Open Clipsy");
+});
+
+it("shows_after_installing_footer_with_shortcut", () => {
+  mockedUseReleases.mockReturnValue({ releases: [release], status: "live" });
+  const { container } = render(<InstallSection />);
+  expect(screen.getByText("After installing:")).toBeInTheDocument();
+  expect([...container.querySelectorAll("kbd")].map((key) => key.textContent)).toEqual(config.shortcut);
 });

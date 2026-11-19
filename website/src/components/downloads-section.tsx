@@ -20,9 +20,9 @@ import { CommandLine } from "@/components/command-line";
 import { config } from "@/config";
 import { useReleases } from "@/hooks/use-releases";
 import { formatBytes } from "@/lib/format";
+import { CHECKSUM_VERIFY_COMMAND } from "@/lib/install-commands";
 import { latestStable, type Release, type ReleaseAsset } from "@/lib/releases";
 
-const CHECKSUM_COMMAND = "sha256sum -c SHA256SUMS";
 const RELEASES_URL = `https://github.com/${config.repo}/releases`;
 const SECTION_CLASS = "flex h-full flex-col";
 const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
@@ -61,7 +61,7 @@ function AssetButton({
 }
 
 function ReleaseBlock({ release, isLatest }: { release: Release; isLatest: boolean }) {
-  const { version, deb, tarball, checksums } = release;
+  const { version, deb, checksums } = release;
   const date = formatDate(release.date);
 
   return (
@@ -89,14 +89,6 @@ function ReleaseBlock({ release, isLatest }: { release: Release; isLatest: boole
         {deb && (
           <AssetButton asset={deb} label={`Download .deb for ${version}`} text="Download .deb" />
         )}
-        {tarball && (
-          <AssetButton
-            asset={tarball}
-            variant="outline"
-            label={`Download no-sudo tarball for ${version}`}
-            text="Download no-sudo tarball"
-          />
-        )}
         {checksums && (
           <AssetButton
             asset={checksums}
@@ -110,7 +102,7 @@ function ReleaseBlock({ release, isLatest }: { release: Release; isLatest: boole
       {checksums && (
         <div className="mt-3">
           <p className="mb-1.5 text-sm text-muted-foreground">Check your download with:</p>
-          <CommandLine text={CHECKSUM_COMMAND} label="Copy checksum command" />
+          <CommandLine text={CHECKSUM_VERIFY_COMMAND} label="Copy checksum command" />
         </div>
       )}
 
@@ -244,7 +236,6 @@ export function DownloadsSection() {
                 <TableHead scope="col">Version</TableHead>
                 <TableHead scope="col">Date</TableHead>
                 <TableHead scope="col">.deb</TableHead>
-                <TableHead scope="col">Tarball</TableHead>
                 <TableHead scope="col">Notes</TableHead>
               </TableRow>
             </TableHeader>
@@ -263,13 +254,6 @@ export function DownloadsSection() {
                       asset={release.deb}
                       label={`Download .deb for ${release.version}`}
                       text=".deb"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <AssetLink
-                      asset={release.tarball}
-                      label={`Download no-sudo tarball for ${release.version}`}
-                      text="Tarball"
                     />
                   </TableCell>
                   <TableCell>

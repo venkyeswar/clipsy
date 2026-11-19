@@ -20,10 +20,17 @@ it("lists_all_five_questions", () => {
   }
 });
 
-it("no_sudo_answer_has_copyable_uninstall_command", async () => {
+it("no_sudo_answer_uses_the_installer_and_local_uninstaller", async () => {
   render(<HelpSection />);
   await userEvent.click(screen.getByRole("button", { name: "I can't use sudo" }));
-  expect(await screen.findByText("./uninstall.sh")).toBeInTheDocument();
+  expect(
+    await screen.findByText(
+      "curl -fsSL https://github.com/venkyeswar/clipsy/releases/latest/download/install.sh -o install.sh",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getByText("sh install.sh")).toBeInTheDocument();
+  expect(screen.getAllByText("sh ~/.local/share/clipsy/uninstall.sh").length).toBeGreaterThan(0);
+  expect(screen.queryByText(/tar -xzf|\.tar\.gz|^\.\/install\.sh$|^\.\/uninstall\.sh$/)).not.toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: "Copy command" }).length).toBeGreaterThan(0);
 });
 

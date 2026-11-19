@@ -69,7 +69,7 @@ it("hides_missing_asset_buttons", () => {
   expect(block).not.toBeNull();
   const latestBlock = within(block as HTMLElement);
   expect(latestBlock.getByRole("link", { name: "Download .deb for 0.4.0" })).toBeInTheDocument();
-  expect(latestBlock.queryByRole("link", { name: /no-sudo tarball/ })).not.toBeInTheDocument();
+  expect(latestBlock.queryByRole("link", { name: /tarball/i })).not.toBeInTheDocument();
   expect(latestBlock.queryByRole("link", { name: /SHA256SUMS/ })).not.toBeInTheDocument();
   expect(latestBlock.queryByText(/sha256sum -c/)).not.toBeInTheDocument();
 });
@@ -103,7 +103,8 @@ it("lists_previous_versions_excluding_latest", () => {
   expect(rows).toHaveLength(2);
   expect(within(rows[0]).getByText("0.5.0-rc.1")).toBeInTheDocument();
   expect(within(rows[1]).getByText("0.3.1")).toBeInTheDocument();
-  expect(within(rows[1]).getByText("Not available")).toBeInTheDocument();
+  expect(within(rows[0]).getByText("Not available")).toBeInTheDocument();
+  expect(within(rows[1]).getByRole("link", { name: "Download .deb for 0.3.1" })).toBeInTheDocument();
   expect(within(table).queryByText("0.4.0")).not.toBeInTheDocument();
 });
 

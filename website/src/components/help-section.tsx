@@ -7,7 +7,12 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { config } from "@/config";
-import { NOSUDO_UNINSTALL_COMMAND, releasesUrl } from "@/lib/install-commands";
+import {
+  NOSUDO_DOWNLOAD_COMMAND,
+  NOSUDO_RUN_COMMAND,
+  NOSUDO_START_COMMAND,
+  NOSUDO_UNINSTALL_COMMAND,
+} from "@/lib/install-commands";
 
 const shortcutText = config.shortcut.join("+");
 
@@ -60,32 +65,28 @@ export function HelpSection() {
 
         <Question value="sudo" title="I can't use sudo">
           <p>
-            The no-sudo install puts Clipsy in your home folder. GTK4 and libadwaita must already
-            be installed, which they are on Ubuntu 24.04 GNOME.
+            Use the no-sudo installer. It puts Clipsy in your home folder (<code>~/.local</code>).
+            GTK4 and libadwaita must already be installed, which they are on Ubuntu 24.04 GNOME. If
+            they are missing, the installer tells you the one command to ask an admin to run.
           </p>
           <ol className="mb-4 list-decimal space-y-2 pl-5">
             <li>
-              Download the <code>.tar.gz</code> file from the{" "}
-              <a href={releasesUrl()} target="_blank" rel="noopener">
-                releases page
-              </a>
-              .
-            </li>
-            <li>
-              Extract it and go into the folder:
-              <div className="mt-1.5 flex flex-col gap-1.5">
-                <CommandLine text="tar -xzf clipsy-*-linux-x86_64.tar.gz" />
-                <CommandLine text="cd clipsy-*-linux-x86_64" />
-              </div>
-            </li>
-            <li>
-              Run the installer:
+              Download the installer from the latest release:
               <div className="mt-1.5">
-                <CommandLine text="./install.sh" />
+                <CommandLine text={NOSUDO_DOWNLOAD_COMMAND} />
               </div>
+            </li>
+            <li>
+              Run it. It downloads Clipsy, checks it and installs it:
+              <div className="mt-1.5">
+                <CommandLine text={NOSUDO_RUN_COMMAND} />
+              </div>
+            </li>
+            <li>
+              Start Clipsy from your app menu, or with <code>{NOSUDO_START_COMMAND}</code>.
             </li>
           </ol>
-          <p>To remove it later, run this from the same folder:</p>
+          <p>To update later, run the same two commands again. To remove it:</p>
           <div className="mt-1.5">
             <CommandLine text={NOSUDO_UNINSTALL_COMMAND} />
           </div>
@@ -106,7 +107,7 @@ export function HelpSection() {
           <Labelled
             label="No sudo install"
             command={NOSUDO_UNINSTALL_COMMAND}
-            after="It asks whether to keep or delete your history."
+            after="It asks whether to keep or delete your history in ~/.local/share/clipsy."
           />
         </Question>
 

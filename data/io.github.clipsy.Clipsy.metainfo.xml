@@ -40,6 +40,15 @@
     <keyword>pin</keyword>
   </keywords>
   <releases>
+    <release version="0.3.3" date="2026-11-19">
+      <description>
+        <ul>
+          <li>Pasting into terminals is more reliable: Clipsy waits for the terminal to take focus before pasting.</li>
+          <li>More terminals are recognised, on X11 and on GNOME Wayland, and non-Latin keyboard layouts work.</li>
+          <li>New terminal_apps setting to paste with Ctrl+Shift+V in chosen apps.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.3.2" date="2026-11-19">
       <description>
         <ul>

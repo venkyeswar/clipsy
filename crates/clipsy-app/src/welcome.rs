@@ -1,6 +1,4 @@
-//! First-run welcome: one small window with the app name, the current shortcut
-//! drawn as keycaps (with a Change button), two switches and a button that
-//! starts Clipsy. Closing the window also counts as "seen".
+//! First-run welcome: a four-page carousel (welcome, shortcut, privacy, settings) with Back/Next. Closing the window also counts as seen.
 
 use std::fs;
 use std::path::PathBuf;

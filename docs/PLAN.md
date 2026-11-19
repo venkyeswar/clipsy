@@ -220,7 +220,7 @@ Use libadwaita widgets and named colors only (`@accent_color`, `@window_bg_color
   ```
 - List: `gtk::ListView` + `gio::ListStore` with lazy thumbnail loading (fast with 500+ items).
 - Row `[⋯]` menu: Paste, Paste as plain text, Pin/Unpin, Copy only (no paste), Delete.
-- Clear button (🗑, right end of the chip row): clears only the current tab's items after a confirm dialog with an "Also remove pinned items" checkbox (unchecked by default). Hidden on the ★ Pinned tab.
+- Clear button (🗑, right end of the chip row): clears only the current tab's items after a confirm dialog with an "Also remove pinned items" checkbox (unchecked by default). The checkbox is hidden on the ★ tab, where the clear removes pinned items.
 - Image rows: hover/Space shows a larger preview popover.
 - Empty state: `adw::StatusPage` "Nothing copied yet — copy something and it will appear here". Paused state: banner "Recording paused [Resume]".
 - Keyboard: ↑/↓ move, Enter paste, Shift+Enter plain-text paste, Ctrl+P pin, Delete remove, Ctrl+1…9 quick paste, Tab cycles filter chips, typing goes to search, Esc closes.
@@ -230,7 +230,7 @@ Use libadwaita widgets and named colors only (`@accent_color`, `@window_bg_color
 - **General:** launch at login, paste after selecting, history size (spin), max total storage, max item size, save images / files / rich text, watch mouse selection.
 - **Appearance:** theme (System / Light / Dark — live preview), popup position, compact rows, show source app.
 - **Shortcuts:** rows for Open clipboard, Clear history, Pause recording. Clicking a row opens a **shortcut recorder dialog** ("Press new shortcut… Esc to cancel, Backspace to clear"), detects conflicts (grab failure → inline error toast "Shortcut already used by another app").
-- **Privacy:** pause recording, skip passwords, ignored apps list (add/remove, with "pick from running windows" helper), clear history on exit, **Clear all history** (destructive, same confirm dialog with the "Also remove pinned items" checkbox).
+- **Privacy:** pause recording, skip passwords, ignored apps list (add/remove, with "pick from running windows" helper), clear history on exit, **Clear history** (destructive, same confirm dialog with the "Also remove pinned items" checkbox).
 - **About:** `adw::AboutWindow` (version, license, links).
 - Opened from popup gear button, `clipsy settings`, or app launcher entry.
 

@@ -196,13 +196,7 @@ impl Store {
     /// case-insensitive substring match (empty = no search).
     pub fn list(&self, query: &str, filter: Filter, limit: usize) -> Result<Vec<ClipItem>> {
         let q = query.trim().to_lowercase();
-        let filter_sql = match filter {
-            Filter::All => "1=1",
-            Filter::Text => "kind IN ('text', 'html')",
-            Filter::Images => "kind = 'image'",
-            Filter::Files => "kind = 'files'",
-            Filter::Pinned => "pinned = 1",
-        };
+        let filter_sql = filter_sql(filter);
         let sql = format!(
             "SELECT id, hash, kind, preview, source_app, byte_size, width, height, pinned, created_at, last_used_at
              FROM items
@@ -304,6 +298,21 @@ impl Store {
             remove_quiet(&self.dir.join("thumbs").join(format!("{h}.png")));
         }
         Ok(())
+    }
+
+    /// Number of items in a tab. On the Pinned tab `include_pinned` is ignored.
+    pub fn count(&self, filter: Filter, include_pinned: bool) -> Result<i64> {
+        let sql = format!("SELECT COUNT(*) FROM items WHERE {}", scope_sql(filter, include_pinned));
+        Ok(self.conn.query_row(&sql, [], |r| r.get(0))?)
+    }
+
+    /// Delete the items of one tab (same scope as `count`). Pinned items of other tabs are
+    /// kept unless `include_pinned` is true. Returns how many items were deleted.
+    pub fn clear_filtered(&self, filter: Filter, include_pinned: bool) -> Result<usize> {
+        let sql = format!("DELETE FROM items WHERE {}", scope_sql(filter, include_pinned));
+        let removed = self.conn.execute(&sql, [])?;
+        self.purge_orphan_files()?;
+        Ok(removed)
     }
 
     /// Delete all items, or only unpinned ones when `keep_pinned` is true.
@@ -510,6 +519,26 @@ struct Description {
 }
 
 // ----- classification and content helpers ------------------------------------------------
+
+/// SQL condition for the items of a tab.
+fn filter_sql(filter: Filter) -> &'static str {
+    match filter {
+        Filter::All => "1=1",
+        Filter::Text => "kind IN ('text', 'html')",
+        Filter::Images => "kind = 'image'",
+        Filter::Files => "kind = 'files'",
+        Filter::Pinned => "pinned = 1",
+    }
+}
+
+/// SQL condition for the items a tab-scoped count or clear applies to.
+fn scope_sql(filter: Filter, include_pinned: bool) -> String {
+    if filter == Filter::Pinned {
+        filter_sql(filter).to_string()
+    } else {
+        format!("({}) AND ({} = 1 OR pinned = 0)", filter_sql(filter), i32::from(include_pinned))
+    }
+}
 
 fn base_mime(mime: &str) -> String {
     mime.split(';').next().unwrap_or("").trim().to_ascii_lowercase()
@@ -1136,6 +1165,111 @@ mod tests {
         let id = store.insert_event(&text_ev(&text), &Config::default()).unwrap().unwrap();
         assert_eq!(count_files(&dir.path().join("blobs")), 1);
         assert_eq!(store.plain_text(id).unwrap().unwrap(), text);
+    }
+
+    /// Two plain texts, one HTML item, one image, and one pinned plain text.
+    /// Returns the ids of (pinned text, image).
+    fn seed_mixed(store: &mut Store) -> (i64, i64) {
+        let cfg = Config::default();
+        store.insert_event(&text_ev("plain one"), &cfg).unwrap().unwrap();
+        store.insert_event(&text_ev("plain two"), &cfg).unwrap().unwrap();
+        let html = ClipEvent {
+            formats: vec![
+                Format { mime: "text/html".into(), data: b"<b>bold</b> words".to_vec() },
+                Format { mime: "text/plain".into(), data: b"bold words".to_vec() },
+            ],
+            source_app: None,
+            sensitive: false,
+        };
+        store.insert_event(&html, &cfg).unwrap().unwrap();
+        let img = ClipEvent {
+            formats: vec![Format { mime: "image/png".into(), data: png_bytes(8, 8) }],
+            source_app: None,
+            sensitive: false,
+        };
+        let img_id = store.insert_event(&img, &cfg).unwrap().unwrap();
+        let pinned = store.insert_event(&text_ev("pinned text"), &cfg).unwrap().unwrap();
+        store.set_pinned(pinned, true).unwrap();
+        (pinned, img_id)
+    }
+
+    #[test]
+    fn count_respects_filter_and_pinned() {
+        let (_dir, mut store) = open();
+        seed_mixed(&mut store);
+        // Text includes html: 2 plain + 1 html unpinned, plus the pinned text.
+        assert_eq!(store.count(Filter::Text, false).unwrap(), 3);
+        assert_eq!(store.count(Filter::Text, true).unwrap(), 4);
+        assert_eq!(store.count(Filter::All, false).unwrap(), 4);
+        assert_eq!(store.count(Filter::All, true).unwrap(), 5);
+        assert_eq!(store.count(Filter::Images, false).unwrap(), 1);
+        assert_eq!(store.count(Filter::Images, true).unwrap(), 1);
+        assert_eq!(store.count(Filter::Files, false).unwrap(), 0);
+        // Pinned tab ignores include_pinned.
+        assert_eq!(store.count(Filter::Pinned, false).unwrap(), 1);
+        assert_eq!(store.count(Filter::Pinned, true).unwrap(), 1);
+    }
+
+    #[test]
+    fn clear_filtered_text_keeps_images_and_pinned() {
+        let (_dir, mut store) = open();
+        seed_mixed(&mut store);
+        assert_eq!(store.clear_filtered(Filter::Text, false).unwrap(), 3);
+        let left = store.list("", Filter::All, 10).unwrap();
+        assert_eq!(left.len(), 2);
+        assert!(left.iter().any(|i| i.kind == Kind::Image));
+        assert!(left.iter().any(|i| i.pinned));
+        assert_eq!(store.count(Filter::Text, true).unwrap(), 1);
+    }
+
+    #[test]
+    fn clear_filtered_include_pinned_removes_pinned() {
+        let (_dir, mut store) = open();
+        seed_mixed(&mut store);
+        assert_eq!(store.clear_filtered(Filter::Text, true).unwrap(), 4);
+        let left = store.list("", Filter::All, 10).unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].kind, Kind::Image);
+        assert_eq!(store.count(Filter::All, true).unwrap(), 1);
+    }
+
+    #[test]
+    fn clear_filtered_pinned_tab_only_removes_pinned() {
+        let (_dir, mut store) = open();
+        let (pinned, _) = seed_mixed(&mut store);
+        // include_pinned is ignored on the Pinned tab.
+        assert_eq!(store.clear_filtered(Filter::Pinned, false).unwrap(), 1);
+        let ids: Vec<i64> = store.list("", Filter::All, 10).unwrap().iter().map(|i| i.id).collect();
+        assert_eq!(ids.len(), 4);
+        assert!(!ids.contains(&pinned));
+        assert_eq!(store.count(Filter::Pinned, true).unwrap(), 0);
+    }
+
+    #[test]
+    fn clear_filtered_all_matches_clear() {
+        let (_dir, mut store) = open();
+        let (pinned, _) = seed_mixed(&mut store);
+        // All with include_pinned = false keeps only pinned items, like clear(true).
+        assert_eq!(store.clear_filtered(Filter::All, false).unwrap(), 4);
+        let left = store.list("", Filter::All, 10).unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].id, pinned);
+
+        let (_dir2, mut store2) = open();
+        seed_mixed(&mut store2);
+        assert_eq!(store2.clear_filtered(Filter::All, true).unwrap(), 5);
+        assert!(store2.list("", Filter::All, 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn clear_filtered_removes_orphan_blobs() {
+        let (dir, mut store) = open();
+        seed_mixed(&mut store);
+        assert_eq!(count_files(&dir.path().join("blobs")), 1);
+        assert_eq!(count_files(&dir.path().join("thumbs")), 1);
+        assert_eq!(store.clear_filtered(Filter::Images, false).unwrap(), 1);
+        assert_eq!(count_files(&dir.path().join("blobs")), 0);
+        assert_eq!(count_files(&dir.path().join("thumbs")), 0);
     }
 
     #[test]

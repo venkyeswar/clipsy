@@ -103,10 +103,11 @@ pub fn selection_after_delete(selected: usize, len_before: usize) -> usize {
     }
 }
 
-/// Paste mode for the row the user activated. Image rows use `Binary` (plain Ctrl+V even in a
-/// terminal, so the target reads the image); `plain` (Shift+Enter) and other rows use `Normal`.
-pub fn paste_mode_for(kind: Kind, plain: bool) -> PasteMode {
-    if kind == Kind::Image && !plain {
+/// Paste mode for the row the user activated. Image rows always use `Binary` (plain Ctrl+V even
+/// in a terminal, so the target reads the image), also with `plain` (Shift+Enter). Other rows use
+/// `Normal`.
+pub fn paste_mode_for(kind: Kind, _plain: bool) -> PasteMode {
+    if kind == Kind::Image {
         PasteMode::Binary
     } else {
         PasteMode::Normal
@@ -136,7 +137,7 @@ mod tests {
     #[test]
     fn image_rows_use_binary_paste_mode() {
         assert_eq!(paste_mode_for(Kind::Image, false), PasteMode::Binary);
-        assert_eq!(paste_mode_for(Kind::Image, true), PasteMode::Normal);
+        assert_eq!(paste_mode_for(Kind::Image, true), PasteMode::Binary);
         assert_eq!(paste_mode_for(Kind::Text, false), PasteMode::Normal);
         assert_eq!(paste_mode_for(Kind::Files, false), PasteMode::Normal);
     }

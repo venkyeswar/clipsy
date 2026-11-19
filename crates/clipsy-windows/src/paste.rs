@@ -95,14 +95,13 @@ pub(crate) mod win {
         PROCESS_QUERY_LIMITED_INFORMATION,
     };
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-        VIRTUAL_KEY,
+        GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, VIRTUAL_KEY,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         GetClassNameW, GetForegroundWindow, GetWindowThreadProcessId, IsWindow, SetForegroundWindow,
     };
 
-    use super::{keys_sequence_for, release_sequence, PasteKeys, SendBlocked, VK_CONTROL, VK_SHIFT};
+    use super::{key_event_flags, keys_sequence_for, release_sequence, PasteKeys, SendBlocked, VK_CONTROL, VK_SHIFT};
 
     /// How long to wait for the target window to become the foreground window.
     pub(crate) const FOCUS_TIMEOUT: Duration = Duration::from_millis(500);
@@ -213,7 +212,7 @@ pub(crate) mod win {
                 ki: KEYBDINPUT {
                     wVk: VIRTUAL_KEY(vk),
                     wScan: 0,
-                    dwFlags: if down { KEYBD_EVENT_FLAGS(0) } else { KEYEVENTF_KEYUP },
+                    dwFlags: KEYBD_EVENT_FLAGS(key_event_flags(vk, down)),
                     time: 0,
                     dwExtraInfo: 0,
                 },
@@ -268,6 +267,20 @@ pub(crate) mod win {
     pub(crate) fn from_raw(raw: isize) -> HWND {
         HWND(raw as *mut c_void)
     }
+}
+
+/// KEYEVENTF_EXTENDEDKEY and KEYEVENTF_KEYUP values for `KEYBDINPUT::dwFlags`.
+const KEYEVENTF_EXTENDEDKEY_FLAG: u32 = 0x0001;
+const KEYEVENTF_KEYUP_FLAG: u32 = 0x0002;
+
+/// `dwFlags` for one key event. Insert is an extended key, so it needs KEYEVENTF_EXTENDEDKEY
+/// on both its down and up events; other keys (Ctrl, Shift, V) get no extra flag.
+pub fn key_event_flags(vk: u16, down: bool) -> u32 {
+    let mut flags = if down { 0 } else { KEYEVENTF_KEYUP_FLAG };
+    if vk == VK_INSERT {
+        flags |= KEYEVENTF_EXTENDEDKEY_FLAG;
+    }
+    flags
 }
 
 /// Key-up events that release every key a paste chord may have pressed. Sent after a partly
@@ -377,6 +390,19 @@ mod tests {
         assert_eq!(keys_for_apps("", Some("Code.exe"), PasteMode::Normal, &extra), PasteKeys::CtrlShiftV);
         assert_eq!(keys_for_apps("", Some("Code.exe"), PasteMode::Binary, &extra), PasteKeys::CtrlV);
         assert_eq!(keys_for_apps("", Some("chrome.exe"), PasteMode::Normal, &extra), PasteKeys::CtrlV);
+    }
+
+    #[test]
+    fn insert_key_events_carry_extended_flag() {
+        assert_eq!(key_event_flags(VK_INSERT, true), 0x0001);
+        assert_eq!(key_event_flags(VK_INSERT, false), 0x0001 | 0x0002);
+    }
+
+    #[test]
+    fn other_keys_have_no_extended_flag() {
+        assert_eq!(key_event_flags(VK_V, true), 0);
+        assert_eq!(key_event_flags(VK_CONTROL, false), 0x0002);
+        assert_eq!(key_event_flags(VK_SHIFT, true), 0);
     }
 
     #[test]

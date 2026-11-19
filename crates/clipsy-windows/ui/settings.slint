@@ -38,6 +38,9 @@ export component SettingsDialog inherits Window {
     in-out property <bool> save-images;
     in-out property <bool> save-files;
     in-out property <string> terminal-apps;
+    in-out property <string> max-total-mb;
+    in-out property <string> max-item-mb;
+    in-out property <bool> save-rich-text;
 
     // appearance
     in-out property <string> theme;
@@ -127,6 +130,18 @@ export component SettingsDialog inherits Window {
                         CheckBox {
                             text: "Save copied files";
                             checked <=> root.save-files;
+                        }
+                        CheckBox {
+                            text: "Keep formatting (rich text) when copying";
+                            checked <=> root.save-rich-text;
+                        }
+                        Field {
+                            label: "Maximum total size (MB)";
+                            value <=> root.max-total-mb;
+                        }
+                        Field {
+                            label: "Maximum size per item (MB)";
+                            value <=> root.max-item-mb;
                         }
                         Field {
                             label: "Terminal apps (comma-separated)";

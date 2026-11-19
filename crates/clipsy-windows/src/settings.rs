@@ -51,6 +51,11 @@ pub fn normalize_position(s: &str) -> &'static str {
     }
 }
 
+/// Accepted range for "maximum total size" in MB (inclusive). Blank or non-numeric input keeps the old value.
+pub const MAX_TOTAL_MB_RANGE: (u32, u32) = (1, 1_000_000);
+/// Accepted range for "maximum size per item" in MB (inclusive). At least 1 MB, or every item would be dropped.
+pub const MAX_ITEM_MB_RANGE: (u32, u32) = (1, 10_000);
+
 #[cfg(windows)]
 pub use window::SettingsWindow;
 
@@ -69,7 +74,10 @@ mod window {
     use clipsy_core::config::Config;
     use slint::ComponentHandle;
 
-    use super::{clamp_u32, join_list, normalize_position, normalize_theme, parse_list, validate_hotkey};
+    use super::{
+        clamp_u32, join_list, normalize_position, normalize_theme, parse_list, validate_hotkey, MAX_ITEM_MB_RANGE,
+        MAX_TOTAL_MB_RANGE,
+    };
     use crate::autostart;
     use crate::backend::WindowsBackend;
     use crate::ui::SettingsDialog;
@@ -168,6 +176,9 @@ mod window {
         dialog.set_save_images(cfg.general.save_images);
         dialog.set_save_files(cfg.general.save_files);
         dialog.set_terminal_apps(join_list(&cfg.general.terminal_apps).into());
+        dialog.set_max_total_mb(cfg.general.max_total_mb.to_string().into());
+        dialog.set_max_item_mb(cfg.general.max_item_mb.to_string().into());
+        dialog.set_save_rich_text(cfg.general.save_rich_text);
 
         dialog.set_theme(cfg.appearance.theme.as_str().into());
         dialog.set_popup_position(cfg.appearance.popup_position.as_str().into());
@@ -226,6 +237,19 @@ mod window {
         next.general.save_images = dialog.get_save_images();
         next.general.save_files = dialog.get_save_files();
         next.general.terminal_apps = parse_list(dialog.get_terminal_apps().as_str());
+        next.general.max_total_mb = clamp_u32(
+            dialog.get_max_total_mb().as_str(),
+            MAX_TOTAL_MB_RANGE.0,
+            MAX_TOTAL_MB_RANGE.1,
+            prev.general.max_total_mb,
+        );
+        next.general.max_item_mb = clamp_u32(
+            dialog.get_max_item_mb().as_str(),
+            MAX_ITEM_MB_RANGE.0,
+            MAX_ITEM_MB_RANGE.1,
+            prev.general.max_item_mb,
+        );
+        next.general.save_rich_text = dialog.get_save_rich_text();
 
         next.appearance.theme = normalize_theme(dialog.get_theme().as_str()).to_string();
         next.appearance.popup_position = normalize_position(dialog.get_popup_position().as_str()).to_string();
@@ -359,5 +383,36 @@ mod tests {
         assert_eq!(clamp_u32("abc", 1, 100, 5), 5);
         assert_eq!(clamp_u32("", 1, 100, 5), 5);
         assert_eq!(clamp_u32("-3", 1, 100, 5), 5);
+    }
+
+    #[test]
+    fn blank_total_size_keeps_old_value() {
+        let (min, max) = MAX_TOTAL_MB_RANGE;
+        assert_eq!(clamp_u32("", min, max, 500), 500);
+        assert_eq!(clamp_u32("   ", min, max, 500), 500);
+    }
+
+    #[test]
+    fn non_numeric_item_size_keeps_old_value() {
+        let (min, max) = MAX_ITEM_MB_RANGE;
+        assert_eq!(clamp_u32("twenty", min, max, 20), 20);
+        assert_eq!(clamp_u32("1.5", min, max, 20), 20);
+    }
+
+    #[test]
+    fn item_size_limit_is_at_least_one_mb() {
+        let (min, max) = MAX_ITEM_MB_RANGE;
+        assert_eq!(min, 1);
+        assert_eq!(clamp_u32("0", min, max, 20), 1);
+        assert_eq!(clamp_u32("999999999", min, max, 20), max);
+        assert_eq!(clamp_u32("64", min, max, 20), 64);
+    }
+
+    #[test]
+    fn total_size_limit_is_at_least_one_mb() {
+        let (min, max) = MAX_TOTAL_MB_RANGE;
+        assert_eq!(min, 1);
+        assert_eq!(clamp_u32("0", min, max, 500), 1);
+        assert_eq!(clamp_u32("2000", min, max, 500), 2000);
     }
 }

@@ -1,0 +1,40 @@
+name: CI Website
+
+# Runs the website lint, test and build job when anything under website/ or this workflow changes.
+on:
+  push:
+    paths:
+      - 'website/**'
+      - '.github/workflows/ci-website.yml'
+  pull_request:
+    paths:
+      - 'website/**'
+      - '.github/workflows/ci-website.yml'
+
+jobs:
+  website:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test -- --run
+
+      - name: Build
+        run: npm run build

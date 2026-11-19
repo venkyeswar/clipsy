@@ -8,10 +8,14 @@ name: Snap
 on:
   push:
     branches: [main]
-    # Docs-only changes do not need a new store upload.
-    paths-ignore:
-      - 'docs/**'
-      - 'README.md'
+    paths:
+      - 'snap/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'data/**'
+      - 'gnome-extension/**'
+      - '.github/workflows/snap.yml'
     tags: ["v*"]
   workflow_dispatch:
 

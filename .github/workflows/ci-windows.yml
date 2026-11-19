@@ -1,0 +1,44 @@
+name: CI Windows
+
+# Runs the Windows build, test and clippy job when the Windows crate, its shared core/backend crates, packaging or this workflow change.
+on:
+  push:
+    paths:
+      - 'crates/clipsy-windows/**'
+      - 'crates/clipsy-core/**'
+      - 'crates/clipsy-backends/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'packaging/windows/**'
+      - '.github/workflows/ci-windows.yml'
+  pull_request:
+    paths:
+      - 'crates/clipsy-windows/**'
+      - 'crates/clipsy-core/**'
+      - 'crates/clipsy-backends/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'packaging/windows/**'
+      - '.github/workflows/ci-windows.yml'
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build clipsy-windows
+        run: cargo build -p clipsy-windows
+
+      - name: Test clipsy-windows
+        run: cargo test -p clipsy-windows
+
+      - name: Clippy clipsy-windows
+        run: cargo clippy -p clipsy-windows --all-targets -- -D warnings

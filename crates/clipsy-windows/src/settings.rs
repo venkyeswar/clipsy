@@ -243,11 +243,23 @@ mod window {
         if let Err(e) = next.save() {
             let mut message = format!("{e:#}");
             if hotkey_changed {
-                if let Err(restore) = backend.rebind_toggle(&prev.shortcuts.toggle_popup) {
-                    message = format!(
-                        "{message}. The previous shortcut {} could not be restored either: {restore:#}",
-                        prev.shortcuts.toggle_popup
-                    );
+                match backend.rebind_toggle(&prev.shortcuts.toggle_popup) {
+                    Ok(()) => {
+                        // The old shortcut is live again, so the field must show it.
+                        dialog.set_toggle_popup(prev.shortcuts.toggle_popup.as_str().into());
+                        let reason = validate_hotkey(&prev.shortcuts.toggle_popup).err().unwrap_or_default();
+                        dialog.set_hotkey_error(reason.into());
+                        message = format!(
+                            "{message}. The previous shortcut {} is active again",
+                            prev.shortcuts.toggle_popup
+                        );
+                    }
+                    Err(restore) => {
+                        message = format!(
+                            "{message}. The previous shortcut {} could not be restored either: {restore:#}",
+                            prev.shortcuts.toggle_popup
+                        );
+                    }
                 }
             }
             return Err(anyhow!("{message}"));
@@ -257,7 +269,11 @@ mod window {
 
         // The config is saved at this point. If the sign-in entry fails, keep everything
         // else and record what the registry really holds, so the form tells the truth.
-        match autostart::set_enabled(&std::env::current_exe()?, next.general.autostart) {
+        // Any failure here, including a missing exe path, takes the same warning path.
+        let applied = std::env::current_exe()
+            .map_err(anyhow::Error::from)
+            .and_then(|exe| autostart::set_enabled(&exe, next.general.autostart));
+        match applied {
             Ok(()) => Ok(Saved::Done),
             Err(autostart_error) => {
                 next.general.autostart = autostart::is_enabled();

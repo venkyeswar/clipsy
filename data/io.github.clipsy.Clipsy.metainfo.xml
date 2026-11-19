@@ -40,6 +40,18 @@
     <keyword>pin</keyword>
   </keywords>
   <releases>
+    <release version="0.4.4" date="2026-11-19">
+      <description>
+        <p>Windows parity with Linux, plus a new default shortcut.</p>
+        <ul>
+          <li>Windows: Win+Shift+V is now the default shortcut, like Ubuntu (falls back to Ctrl+Shift+V if Windows blocks it).</li>
+          <li>Windows: redesigned popup with delete, preview, hint bar and a resizable window.</li>
+          <li>Windows: clear history asks for confirmation inside the popup.</li>
+          <li>Windows: more settings (size limits, rich text) and the Clipsy logo everywhere.</li>
+          <li>Windows: images now paste into Paint, Word, browsers and terminals; text pastes into cmd and PowerShell.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.4.3" date="2026-11-19">
       <description>
         <ul>

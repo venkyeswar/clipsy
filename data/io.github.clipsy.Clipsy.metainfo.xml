@@ -40,6 +40,15 @@
     <keyword>pin</keyword>
   </keywords>
   <releases>
+    <release version="0.3.2" date="2026-11-19">
+      <description>
+        <ul>
+          <li>A trash button next to the filter tabs clears one tab at a time, with an option to also remove pinned items.</li>
+          <li>A wider popup, and a new multi-page welcome screen.</li>
+          <li>Clicking an item pastes correctly in Warp and more terminals.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.3.1" date="2026-11-19">
       <description>
         <p>The filter tabs (All, Text, Images, Files, Pinned) select with one click on Wayland and Xorg.</p>

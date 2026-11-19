@@ -23,14 +23,49 @@ const PLACE_FALLBACK_MS = 120;
 const POPUP_TITLE = 'Clipboard history';
 const PASSWORD_HINT = 'x-kde-passwordManagerHint';
 const PASSWORD_MANAGERS = ['keepassxc', 'bitwarden', '1password', 'org.gnome.world.secrets'];
-const TERMINALS = ['gnome-terminal', 'kgx', 'org.gnome.console', 'ptyxis', 'org.gnome.ptyxis',
-    'tilix', 'alacritty', 'kitty', 'wezterm', 'xterm', 'konsole', 'terminator', 'foot'];
+// Terminals paste with Ctrl+Shift+V. Same lists as the X11 backend (x11.rs, a test
+// checks they match): a lower-case window class / app id that contains one of
+// TERMINAL_SUBSTRINGS, or is exactly one of TERMINAL_EXACT, is a terminal.
+const TERMINAL_SUBSTRINGS = [
+    'terminal', 'kitty', 'alacritty', 'wezterm', 'konsole', 'ptyxis', 'xterm', 'rxvt', 'tilix',
+    'terminator', 'ghostty', 'sakura', 'guake', 'yakuake', 'terminology', 'cool-retro-term',
+];
+const TERMINAL_EXACT = [
+    'warp', 'dev.warp.warp', 'org.gnome.console', 'kgx', 'st', 'st-256color', 'foot', 'footclient',
+    'tabby', 'hyper', 'contour', 'rio', 'blackbox', 'com.raggesilver.blackbox', 'tilda', 'eterm',
+    'termite', 'zutty',
+];
+const FOCUS_TIMEOUT_MS = 500;
+const FOCUS_POLL_MS = 10;
 const ALL_MODES = Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW | Shell.ActionMode.POPUP;
 const TEXT_MIMES = ['text/plain;charset=utf-8', 'UTF8_STRING', 'text/plain'];
 const SET_ORDER_EXACT = ['x-special/gnome-copied-files', 'image/png'];
 
 function nowMs() {
     return GLib.get_monotonic_time() / 1000;
+}
+
+// Every name the window is known by: X11 WM_CLASS, Wayland app id, Flatpak id.
+function windowNames(win) {
+    const names = [];
+    for (const get of ['get_wm_class', 'get_wm_class_instance', 'get_gtk_application_id',
+        'get_sandboxed_app_id']) {
+        try {
+            const name = win[get]?.();
+            if (name)
+                names.push(name.trim().toLowerCase());
+        } catch (e) {
+            // not available for this window
+        }
+    }
+    return names;
+}
+
+// `extra` are user-chosen app classes (config `terminal_apps`), matched exactly.
+function isTerminalWindow(win, extra = []) {
+    const wanted = extra.filter(e => typeof e === 'string').map(e => e.trim().toLowerCase());
+    return windowNames(win).some(n => TERMINAL_EXACT.includes(n) || wanted.includes(n) ||
+        TERMINAL_SUBSTRINGS.some(t => n.includes(t)));
 }
 
 function isClipsyWindow(win) {
@@ -315,7 +350,8 @@ export default class ClipsyExtension extends Extension {
             this._setClipboard(msg.formats);
             break;
         case 'paste':
-            this._paste(msg.mode === 'terminal');
+            this._paste(msg.mode === 'terminal',
+                Array.isArray(msg.terminal_apps) ? msg.terminal_apps : []);
             break;
         default:
             break;
@@ -515,7 +551,7 @@ export default class ClipsyExtension extends Extension {
         this._remembered = win;
     }
 
-    _paste(terminalMode) {
+    _paste(terminalMode, terminalApps) {
         const win = this._remembered;
         if (win) {
             try {
@@ -526,21 +562,40 @@ export default class ClipsyExtension extends Extension {
             }
         }
         let terminal = terminalMode;
-        if (!terminal && win) {
-            try {
-                const cls = (win.get_wm_class() ?? '').toLowerCase();
-                terminal = TERMINALS.some(t => cls.includes(t));
-            } catch (e) {
-                // ignore
-            }
-        }
+        if (!terminal && win)
+            terminal = isTerminalWindow(win, terminalApps);
         if (this._pasteId)
             GLib.source_remove(this._pasteId);
+        // Wait at least PASTE_DELAY_MS, then until the window really has focus (slow
+        // terminals take longer), but never more than FOCUS_TIMEOUT_MS on top.
+        const start = nowMs();
         this._pasteId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, PASTE_DELAY_MS, () => {
             this._pasteId = 0;
-            this._sendPasteKeys(terminal);
+            this._sendWhenFocused(win, terminal, start);
             return GLib.SOURCE_REMOVE;
         });
+    }
+
+    _sendWhenFocused(win, terminal, start) {
+        if (!this._enabled)
+            return;
+        const focused = !win || global.display.focus_window === win;
+        if (!focused && nowMs() - start < PASTE_DELAY_MS + FOCUS_TIMEOUT_MS) {
+            this._pasteId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FOCUS_POLL_MS, () => {
+                this._pasteId = 0;
+                this._sendWhenFocused(win, terminal, start);
+                return GLib.SOURCE_REMOVE;
+            });
+            return;
+        }
+        this._logPaste(win, terminal, focused);
+        this._sendPasteKeys(terminal);
+    }
+
+    _logPaste(win, terminal, focused) {
+        const names = win ? windowNames(win).join('/') : 'none';
+        console.log(`Clipsy: paste into ${names} terminal=${terminal} focused=${focused} ` +
+            `keys=${terminal ? 'Ctrl+Shift+V' : 'Ctrl+V'}`);
     }
 
     _sendPasteKeys(shift) {

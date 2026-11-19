@@ -54,24 +54,49 @@ const MODIFIER_TIMEOUT: Duration = Duration::from_millis(300);
 const KEY_GAP: Duration = Duration::from_millis(8);
 /// Physical V key (evdev and xfree86 keycode), used when no layout has a `v` keysym.
 const KEYCODE_V: u8 = 55;
-const TERMINAL_CLASSES: &[&str] = &[
-    "terminal",
+/// Window classes (lower case) that contain one of these belong to a terminal, which pastes
+/// with Ctrl+Shift+V. Only names that cannot appear inside an ordinary app's class.
+/// Keep in sync with `TERMINAL_SUBSTRINGS` in the GNOME extension (a test checks this).
+const TERMINAL_SUBSTRINGS: &[&str] = &[
+    "terminal", // gnome-terminal-server, org.gnome.Terminal, xfce4-terminal, warp-terminal...
     "kitty",
     "alacritty",
     "wezterm",
     "konsole",
     "ptyxis",
     "xterm",
-    "warp",
+    "rxvt",
     "tilix",
     "terminator",
     "ghostty",
-    "console",
-    "kgx",
-    "rxvt",
     "sakura",
     "guake",
     "yakuake",
+    "terminology",
+    "cool-retro-term",
+];
+/// Short or ambiguous terminal classes (lower case): only an exact match counts, so
+/// "Warpinator", "stylus" or "Hyperion" are not mistaken for terminals.
+/// Keep in sync with `TERMINAL_EXACT` in the GNOME extension (a test checks this).
+const TERMINAL_EXACT: &[&str] = &[
+    "warp",
+    "dev.warp.warp",
+    "org.gnome.console",
+    "kgx",
+    "st",
+    "st-256color",
+    "foot",
+    "footclient",
+    "tabby",
+    "hyper",
+    "contour",
+    "rio",
+    "blackbox",
+    "com.raggesilver.blackbox",
+    "tilda",
+    "eterm",
+    "termite",
+    "zutty",
 ];
 
 // Modifier bits (core protocol).
@@ -316,8 +341,8 @@ fn parse_accel(accel: &str) -> Result<(u16, u32)> {
 }
 
 fn is_terminal(class: &str) -> bool {
-    let class = class.to_ascii_lowercase();
-    TERMINAL_CLASSES.iter().any(|t| class.contains(t))
+    let class = class.trim().to_ascii_lowercase();
+    TERMINAL_EXACT.contains(&class.as_str()) || TERMINAL_SUBSTRINGS.iter().any(|t| class.contains(t))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1076,20 +1101,74 @@ mod tests {
     fn is_terminal_matches_common_terminals() {
         for class in [
             "gnome-terminal-server",
+            "Gnome-terminal",
+            "org.gnome.Terminal",
             "kitty",
             "Alacritty",
             "org.gnome.Console",
+            "kgx",
+            "org.gnome.Ptyxis",
             "tilix",
-            "ghostty",
+            "com.mitchellh.ghostty",
+            "org.wezfurlong.wezterm",
+            "konsole",
+            "XTerm",
+            "URxvt",
+            "Xfce4-terminal",
+            "Terminator",
+            "terminology",
+            "cool-retro-term",
         ] {
             assert!(is_terminal(class), "expected {class:?} to be a terminal");
         }
     }
 
     #[test]
+    fn is_terminal_matches_exact_names_only() {
+        for class in ["st", "st-256color", "foot", "footclient", "tabby", "Hyper", "contour", "rio", "Warp",
+            "com.raggesilver.BlackBox", "Tilda"]
+        {
+            assert!(is_terminal(class), "expected {class:?} to be a terminal");
+        }
+    }
+
+    #[test]
     fn is_terminal_rejects_normal_apps() {
-        for class in ["Google-chrome", "firefox", "code", "Gedit", "org.gnome.Nautilus"] {
+        for class in [
+            "Google-chrome",
+            "firefox",
+            "code",
+            "Code",
+            "Gedit",
+            "org.gnome.Nautilus",
+            "stylus",
+            "distro",
+            "Steam",
+            "Warpinator",
+            "Hyperion",
+            "footage",
+            "jconsole",
+            "org.gnome.TextEditor",
+            "",
+        ] {
             assert!(!is_terminal(class), "expected {class:?} not to be a terminal");
         }
+    }
+
+    /// The GNOME extension (Wayland) must detect the same terminals as this backend.
+    #[test]
+    fn gnome_extension_uses_the_same_terminal_lists() {
+        let js = include_str!("../../../gnome-extension/clipsy@venkyeswar.github.io/extension.js");
+        let list = |name: &str| -> Vec<String> {
+            let start = js.find(&format!("const {name} = [")).unwrap_or_else(|| panic!("{name} missing"));
+            let body = &js[start..];
+            let body = &body[body.find('[').unwrap() + 1..body.find(']').unwrap()];
+            body.split(',')
+                .map(|s| s.split("//").next().unwrap().trim().trim_matches('\'').to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        };
+        assert_eq!(list("TERMINAL_SUBSTRINGS"), TERMINAL_SUBSTRINGS);
+        assert_eq!(list("TERMINAL_EXACT"), TERMINAL_EXACT);
     }
 }

@@ -21,4 +21,4 @@ Cloudflare builds and deploys it automatically when something is pushed to the `
 - `website/wrangler.jsonc` names the Worker (`clipsy`) and the build folder (`./dist`).
 - Push to `main` only for website changes. Pushing the same commit to two branches at once confused Cloudflare earlier. It built the other branch with the wrong root.
 - Manual fallback if automatic builds stop: run `cd website && npm run build`. Then, in the Cloudflare dashboard, open the worker, go to Deployments, click New deployment, and upload the `website/dist` folder.
-- There is also a GitHub Actions workflow, `.github/workflows/deploy-website.yml`, that can deploy with wrangler. It does nothing unless the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` exist.
+- Deploys come only from the Cloudflare Git integration (a push to `main` that changes `website/`). There is no GitHub Actions deploy workflow.

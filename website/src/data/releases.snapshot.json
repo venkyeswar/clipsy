@@ -1,5 +1,45 @@
 [
   {
+    "tag_name": "v0.4.4",
+    "html_url": "https://github.com/venkyeswar/clipsy/releases/tag/v0.4.4",
+    "published_at": "2026-11-19T15:32:07Z",
+    "created_at": "2026-11-19T15:11:58Z",
+    "draft": false,
+    "prerelease": false,
+    "assets": [
+      {
+        "name": "clipsy-0.4.4-setup.exe",
+        "browser_download_url": "https://github.com/venkyeswar/clipsy/releases/download/v0.4.4/clipsy-0.4.4-setup.exe",
+        "size": 6976618
+      },
+      {
+        "name": "clipsy-0.4.4-windows-x64.zip",
+        "browser_download_url": "https://github.com/venkyeswar/clipsy/releases/download/v0.4.4/clipsy-0.4.4-windows-x64.zip",
+        "size": 6596141
+      },
+      {
+        "name": "clipsy_0.4.4-1_amd64.deb",
+        "browser_download_url": "https://github.com/venkyeswar/clipsy/releases/download/v0.4.4/clipsy_0.4.4-1_amd64.deb",
+        "size": 1264752
+      },
+      {
+        "name": "install.sh",
+        "browser_download_url": "https://github.com/venkyeswar/clipsy/releases/download/v0.4.4/install.sh",
+        "size": 13343
+      },
+      {
+        "name": "SHA256SUMS",
+        "browser_download_url": "https://github.com/venkyeswar/clipsy/releases/download/v0.4.4/SHA256SUMS",
+        "size": 275
+      },
+      {
+        "name": "uninstall.sh",
+        "browser_download_url": "https://github.com/venkyeswar/clipsy/releases/download/v0.4.4/uninstall.sh",
+        "size": 6549
+      }
+    ]
+  },
+  {
     "tag_name": "v0.4.3",
     "html_url": "https://github.com/venkyeswar/clipsy/releases/tag/v0.4.3",
     "published_at": "2026-11-19T12:05:08Z",

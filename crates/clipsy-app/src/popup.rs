@@ -1051,8 +1051,11 @@ fn add_move_handle(widget: &impl IsA<gtk::Widget>, window: &gtk::Window, moving:
 const MIN_SIZE: (i32, i32) = (380, 260);
 const MAX_SIZE: (i32, i32) = (900, 1000);
 
+/// File that holds the last saved popup size as "WxH".
+const SIZE_FILE: &str = "popup-size";
+
 fn size_file() -> Option<std::path::PathBuf> {
-    clipsy_core::config::data_dir().ok().map(|d| d.join("popup-size"))
+    clipsy_core::config::data_dir().ok().map(|d| d.join(SIZE_FILE))
 }
 
 /// Parses a saved "WxH" size, clamping each side to MIN_SIZE..=MAX_SIZE.
@@ -1070,8 +1073,8 @@ const SIZE_MARKER: &str = "popup-size-v2";
 /// The size the user last dragged the popup to, or DEFAULT_SIZE.
 ///
 /// Before the 440x560 default, the popup saved sizes that are now too small to use. The
-/// first run after this change ignores any saved size and creates the marker file, so
-/// the new default shows once. After that, the saved size is used again.
+/// first run after this change deletes the old saved size, creates the marker file, and
+/// returns DEFAULT_SIZE. After that, the saved size is used again.
 fn load_saved_size() -> (i32, i32) {
     match clipsy_core::config::data_dir() {
         Ok(dir) => load_size_from(&dir),
@@ -1083,12 +1086,15 @@ fn load_saved_size() -> (i32, i32) {
 fn load_size_from(dir: &std::path::Path) -> (i32, i32) {
     let marker = dir.join(SIZE_MARKER);
     if !marker.exists() {
+        // Delete the old size first, so it cannot come back if the marker is written but
+        // the popup never saves a new size before the next start.
+        let _ = std::fs::remove_file(dir.join(SIZE_FILE));
         if let Err(err) = std::fs::write(&marker, "") {
             tracing::warn!("could not create {}: {err:#}", marker.display());
         }
         return DEFAULT_SIZE;
     }
-    std::fs::read_to_string(dir.join("popup-size"))
+    std::fs::read_to_string(dir.join(SIZE_FILE))
         .ok()
         .and_then(|text| parse_size(&text))
         .unwrap_or(DEFAULT_SIZE)
@@ -1188,22 +1194,29 @@ mod tests {
     #[test]
     fn load_size_from_resets_once_then_reads_saved_size() {
         let dir = tempfile::tempdir().unwrap();
-        let marker = dir.path().join("popup-size-v2");
-        std::fs::write(dir.path().join("popup-size"), "500x600").unwrap();
+        let marker = dir.path().join(SIZE_MARKER);
+        let size = dir.path().join(SIZE_FILE);
+        std::fs::write(&size, "500x600").unwrap();
 
-        // Marker absent: the old saved size is ignored and the marker is created.
+        // Marker absent: the old saved size is deleted, the marker is created, and the
+        // default is returned.
         assert_eq!(load_size_from(dir.path()), placement::DEFAULT_SIZE);
         assert!(marker.exists());
+        assert!(!size.exists());
 
-        // Marker present: the saved size is used.
+        // The next start, with no new size saved, still gives the default.
+        assert_eq!(load_size_from(dir.path()), placement::DEFAULT_SIZE);
+
+        // A size saved after the reset is read back.
+        std::fs::write(&size, "500x600").unwrap();
         assert_eq!(load_size_from(dir.path()), (500, 600));
     }
 
     #[test]
     fn load_size_from_falls_back_on_garbage() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("popup-size-v2"), "").unwrap();
-        std::fs::write(dir.path().join("popup-size"), "garbage").unwrap();
+        std::fs::write(dir.path().join(SIZE_MARKER), "").unwrap();
+        std::fs::write(dir.path().join(SIZE_FILE), "garbage").unwrap();
         assert_eq!(load_size_from(dir.path()), placement::DEFAULT_SIZE);
     }
 

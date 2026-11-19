@@ -40,7 +40,25 @@ const STEP_TIMEOUT: Duration = Duration::from_secs(3);
 /// Pause between reading TARGETS and requesting content (see read_clipboard).
 const SETTLE_DELAY: Duration = Duration::from_millis(20);
 const MIME_UTF8: &str = "text/plain;charset=utf-8";
-const TERMINAL_CLASSES: &[&str] = &["terminal", "kitty", "alacritty", "wezterm", "konsole", "ptyxis", "xterm"];
+const TERMINAL_CLASSES: &[&str] = &[
+    "terminal",
+    "kitty",
+    "alacritty",
+    "wezterm",
+    "konsole",
+    "ptyxis",
+    "xterm",
+    "warp",
+    "tilix",
+    "terminator",
+    "ghostty",
+    "console",
+    "kgx",
+    "rxvt",
+    "sakura",
+    "guake",
+    "yakuake",
+];
 
 // Modifier bits (core protocol).
 const M_LOCK: u16 = 1 << 1;
@@ -911,5 +929,31 @@ mod tests {
         assert!(parse_accel("NoSuchKey").is_err());
         assert!(parse_accel("<Super>vv").is_err());
         assert!(parse_accel("<Super>F13").is_err());
+    }
+
+    #[test]
+    fn is_terminal_matches_warp() {
+        assert!(is_terminal("dev.warp.Warp"));
+    }
+
+    #[test]
+    fn is_terminal_matches_common_terminals() {
+        for class in [
+            "gnome-terminal-server",
+            "kitty",
+            "Alacritty",
+            "org.gnome.Console",
+            "tilix",
+            "ghostty",
+        ] {
+            assert!(is_terminal(class), "expected {class:?} to be a terminal");
+        }
+    }
+
+    #[test]
+    fn is_terminal_rejects_normal_apps() {
+        for class in ["Google-chrome", "firefox", "code", "Gedit", "org.gnome.Nautilus"] {
+            assert!(!is_terminal(class), "expected {class:?} not to be a terminal");
+        }
     }
 }

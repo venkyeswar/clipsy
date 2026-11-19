@@ -8,10 +8,11 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use clipsy_backends::HotkeyAction;
-use clipsy_core::Config;
+use clipsy_core::{Config, Filter};
 use gtk::{gdk, glib};
 
 use crate::app::{apply_theme, set_hotkey, update_config, State};
+use crate::clear_dialog;
 use crate::{autostart, gnome_setup, APP_ID};
 
 /// Name used to find an open Settings window again.
@@ -262,8 +263,8 @@ fn privacy_page(
 
     let data = new_group("Data");
     let clear_row = adw::ActionRow::new();
-    clear_row.set_title("Clear all history");
-    clear_row.set_subtitle("Removes every item, including pinned ones.");
+    clear_row.set_title("Clear history");
+    clear_row.set_subtitle("Removes history. You can also remove pinned items.");
     let clear_button = gtk::Button::with_label("Clear…");
     clear_button.add_css_class("destructive-action");
     clear_button.set_valign(gtk::Align::Center);
@@ -682,29 +683,10 @@ fn add_ignored_app(list: &Rc<IgnoredList>) {
 // Clear history
 // ----------------------------------------------------------------------
 
-/// Asks before deleting everything, including pinned items.
+/// Asks before clearing the whole history, using the shared clear dialog.
 fn confirm_clear(window: &adw::PreferencesWindow, state: &Rc<State>) {
-    let dialog = adw::MessageDialog::new(
-        Some(window),
-        Some("Clear all history?"),
-        Some("Every item will be removed, including pinned ones. This cannot be undone."),
-    );
-    dialog.add_response("cancel", "Cancel");
-    dialog.add_response("clear", "Clear all");
-    dialog.set_response_appearance("clear", adw::ResponseAppearance::Destructive);
-    dialog.set_default_response(Some("cancel"));
-    dialog.set_close_response("cancel");
-
-    let (st, w) = (state.clone(), window.clone());
-    dialog.connect_response(None, move |_, response| {
-        if response != "clear" {
-            return;
-        }
-        if let Err(err) = st.store.borrow().clear(false) {
-            tracing::warn!("could not clear history: {err:#}");
-            return;
-        }
+    let w = window.clone();
+    clear_dialog::confirm(window, state.clone(), Filter::All, move || {
         w.add_toast(adw::Toast::new("History cleared"));
     });
-    dialog.present();
 }

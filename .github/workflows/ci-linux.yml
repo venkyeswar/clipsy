@@ -1,20 +1,28 @@
+# Shared crates (clipsy-core, clipsy-backends) and the Cargo files run both apps; app-specific code runs only that app.
+
 name: CI Linux
 
-# Runs the Linux build, test and clippy job when Rust crates, Cargo files, data or this workflow change.
+# Runs for the Ubuntu app, the shared crates, app data and the GNOME extension; not for Windows-only or website changes.
 on:
   push:
     paths:
-      - 'crates/**'
+      - 'crates/clipsy-app/**'
+      - 'crates/clipsy-backends/**'
+      - 'crates/clipsy-core/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'data/**'
+      - 'gnome-extension/**'
       - '.github/workflows/ci-linux.yml'
   pull_request:
     paths:
-      - 'crates/**'
+      - 'crates/clipsy-app/**'
+      - 'crates/clipsy-backends/**'
+      - 'crates/clipsy-core/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'data/**'
+      - 'gnome-extension/**'
       - '.github/workflows/ci-linux.yml'
 
 jobs:
@@ -37,10 +45,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --workspace
+        run: cargo build --workspace --exclude clipsy-windows
 
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace --exclude clipsy-windows
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude clipsy-windows --all-targets -- -D warnings

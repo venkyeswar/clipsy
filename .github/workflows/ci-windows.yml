@@ -1,6 +1,8 @@
+# Shared crates (clipsy-core, clipsy-backends) and the Cargo files run both apps; app-specific code runs only that app.
+
 name: CI Windows
 
-# Runs the Windows build, test and clippy job when the Windows crate, its shared core/backend crates, packaging or this workflow change.
+# Runs for the Windows app and the shared crates (clipsy-core, clipsy-backends), plus the Cargo files, packaging and this workflow.
 on:
   push:
     paths:

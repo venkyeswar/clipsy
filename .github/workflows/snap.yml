@@ -1,3 +1,5 @@
+# Shared crates (clipsy-core, clipsy-backends) and the Cargo files run both apps; app-specific code runs only that app.
+
 name: Snap
 
 # Builds the snap on every push to main (and on version tags). The .snap file is
@@ -10,7 +12,9 @@ on:
     branches: [main]
     paths:
       - 'snap/**'
-      - 'crates/**'
+      - 'crates/clipsy-app/**'
+      - 'crates/clipsy-backends/**'
+      - 'crates/clipsy-core/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'data/**'

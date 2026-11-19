@@ -29,7 +29,7 @@ const LABEL_RESUME: &str = "Resume capture";
 
 /// The tray icon and its menu. Keep it alive for as long as the tray should show.
 pub struct Tray {
-    _icon: TrayIcon,
+    icon: TrayIcon,
     pause_item: MenuItem,
     paused: Cell<bool>,
     on_verb: Box<dyn Fn(Verb)>,
@@ -64,7 +64,7 @@ impl Tray {
             .context("could not create the system tray icon")?;
 
         Ok(Tray {
-            _icon: tray_icon,
+            icon: tray_icon,
             pause_item,
             paused: Cell::new(false),
             on_verb: Box::new(on_verb),
@@ -109,10 +109,15 @@ impl Tray {
         self.pause_item.set_text(if paused { LABEL_RESUME } else { LABEL_PAUSE });
     }
 
-    /// Would show a balloon notification. tray-icon 0.19 has no notification API,
-    /// so this only logs the message.
+    /// Shows a short message by setting the tray tooltip (hover the tray icon to read it),
+    /// because tray-icon 0.19 has no balloon notification API. The message is also logged.
+    /// The tooltip keeps only the first 127 UTF-16 units, and a later call replaces it.
     pub fn notify(&self, title: &str, body: &str) {
-        tracing::info!("tray notification (not shown, unsupported): {title}: {body}");
+        let text = format!("{title}: {body}");
+        tracing::info!("tray notification: {text}");
+        if let Err(e) = self.icon.set_tooltip(Some(text)) {
+            tracing::warn!("could not set the tray tooltip: {e}");
+        }
     }
 }
 

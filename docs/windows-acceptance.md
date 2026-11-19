@@ -299,9 +299,13 @@ Steps:
 1. Right-click the tray icon, click **Settings**.
 2. In the **Shortcuts** group, click in the field labelled **Show popup**. Select the text
    and type `<Super>v` (this is Win+V, which Windows reserves).
-3. Click **Save** at the bottom of the window. If **Save** is greyed out, the red message under
-   **Show popup** says why. Click **Cancel** and try again.
-4. Read the message. It appears in red under the **Show popup** field, or at the bottom of the window.
+3. Click **Save** at the bottom of the window.
+4. Read the message. Clipsy shows it in red in one of two places:
+   - An invalid shortcut, such as one with no key name: the red message
+     appears under **Show popup** and **Save** is greyed out. Click **Cancel** and try again.
+   - A shortcut that is valid but taken (such as `<Super>v`): **Save** stays enabled. After you
+     click it, the red message appears at the bottom of the window, just above **Cancel** and
+     **Save**, and the window stays open. Nothing is changed.
 5. If Settings closed or the message is not clear, note what you saw.
 6. Click **Cancel** (or close Settings) and press **Ctrl+Shift+V**.
 
@@ -323,7 +327,10 @@ Steps if Settings does not let you save (or you want to test a startup problem):
    ```
 
    Expected: `config.toml`, **not** `config.toml.txt`.
-5. Start Clipsy again. Note whether it starts, and whether it shows an error.
+5. Start Clipsy again. Note whether it starts. A startup conflict has no pop-up. Hover the mouse
+   over the Clipsy tray icon: the tooltip reads `Clipsy: Shortcut <Super>v is not available...`.
+   The console window also shows a `warn` line that names the shortcut. Write down what you saw.
+   The tooltip stays until Clipsy restarts.
 6. Change `toggle_popup` back to `"<Ctrl><Shift>v"`, save the same way (**Save as**, **All Files**), and restart Clipsy.
 
 Expected: Clipsy still starts and the tray icon works, even with a bad shortcut.

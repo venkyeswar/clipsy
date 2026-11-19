@@ -128,6 +128,60 @@ pub fn clamp_to_area(pos: (i32, i32), size: (i32, i32), area: (i32, i32, i32, i3
     (x, y)
 }
 
+/// Smallest popup size in logical pixels. Keep in step with the grip logic in src/popup.rs.
+pub const POPUP_MIN_SIZE: (f32, f32) = (320.0, 300.0);
+/// Largest popup size in logical pixels.
+pub const POPUP_MAX_SIZE: (f32, f32) = (900.0, 1000.0);
+
+/// Keep a popup size inside `POPUP_MIN_SIZE` and `POPUP_MAX_SIZE`, each side on its own.
+pub fn clamp_popup_size(width: f32, height: f32) -> (f32, f32) {
+    (
+        width.clamp(POPUP_MIN_SIZE.0, POPUP_MAX_SIZE.0),
+        height.clamp(POPUP_MIN_SIZE.1, POPUP_MAX_SIZE.1),
+    )
+}
+
+/// How many items a clear would remove. Pinned items are kept unless `also_pinned` is true.
+pub fn clearable_count(total: usize, pinned: usize, also_pinned: bool) -> usize {
+    if also_pinned {
+        total
+    } else {
+        total.saturating_sub(pinned)
+    }
+}
+
+/// The question shown in the clear-history overlay for the given counts.
+///
+/// `total` is every item in history, `pinned` how many of them are pinned.
+/// `(0, 0, _)` gives "Nothing to clear.". With pinned items kept, the message says how many
+/// are removed and how many stay.
+pub fn clear_message(total: usize, pinned: usize, also_pinned: bool) -> String {
+    if total == 0 {
+        return "Nothing to clear.".to_string();
+    }
+    let noun = |n: usize| if n == 1 { "item" } else { "items" };
+    if also_pinned {
+        return if pinned == 0 {
+            format!("Remove all {total} {}?", noun(total))
+        } else {
+            format!("Remove all {total} {}, including {pinned} pinned?", noun(total))
+        };
+    }
+    let removable = clearable_count(total, pinned, false);
+    if removable == 0 {
+        return format!("Nothing to clear. {pinned} pinned {} will be kept.", noun(pinned));
+    }
+    if pinned == 0 {
+        format!("Remove {removable} {}?", noun(removable))
+    } else {
+        format!(
+            "Remove {removable} {}? {pinned} pinned {} will be kept.",
+            noun(removable),
+            noun(pinned)
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,5 +310,52 @@ mod tests {
     fn clamp_oversized_popup_aligns_to_top_left() {
         assert_eq!(clamp_to_area((50, 50), (420, 520), (0, 0, 300, 200)), (0, 0));
         assert_eq!(clamp_to_area((500, 500), (420, 520), (10, 20, 310, 220)), (10, 20));
+    }
+
+    #[test]
+    fn clear_message_nothing_when_empty() {
+        assert_eq!(clear_message(0, 0, false), "Nothing to clear.");
+        assert_eq!(clear_message(0, 0, true), "Nothing to clear.");
+    }
+
+    #[test]
+    fn clear_message_keeps_pinned_by_default() {
+        assert_eq!(clear_message(12, 3, false), "Remove 9 items? 3 pinned items will be kept.");
+    }
+
+    #[test]
+    fn clear_message_including_pinned() {
+        assert_eq!(clear_message(12, 3, true), "Remove all 12 items, including 3 pinned?");
+    }
+
+    #[test]
+    fn clear_message_singular_for_one_item() {
+        assert_eq!(clear_message(1, 0, false), "Remove 1 item?");
+        assert_eq!(clear_message(1, 1, true), "Remove all 1 item, including 1 pinned?");
+    }
+
+    #[test]
+    fn clear_message_only_pinned_nothing_removable() {
+        assert_eq!(clear_message(3, 3, false), "Nothing to clear. 3 pinned items will be kept.");
+    }
+
+    #[test]
+    fn clearable_count_follows_keep_pinned() {
+        assert_eq!(clearable_count(12, 3, false), 9);
+        assert_eq!(clearable_count(12, 3, true), 12);
+        assert_eq!(clearable_count(0, 0, false), 0);
+    }
+
+    #[test]
+    fn popup_size_clamps_to_min_and_max() {
+        assert_eq!(clamp_popup_size(100.0, 100.0), (320.0, 300.0));
+        assert_eq!(clamp_popup_size(5000.0, 5000.0), (900.0, 1000.0));
+        assert_eq!(clamp_popup_size(420.0, 520.0), (420.0, 520.0));
+    }
+
+    #[test]
+    fn popup_size_clamps_each_side_separately() {
+        assert_eq!(clamp_popup_size(200.0, 800.0), (320.0, 800.0));
+        assert_eq!(clamp_popup_size(700.0, 2000.0), (700.0, 1000.0));
     }
 }

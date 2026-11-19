@@ -95,7 +95,7 @@ mod window {
 
     impl SettingsWindow {
         /// Builds the window. `on_saved` runs after a successful Save, before the window hides.
-        /// `on_clear` runs when "Clear history..." is clicked (the app asks for the confirm dialog).
+        /// `on_clear` runs when "Clear history..." is clicked (the app opens the confirmation in the popup).
         pub fn new(
             config: Rc<RefCell<Config>>,
             backend: Rc<WindowsBackend>,

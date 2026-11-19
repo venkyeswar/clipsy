@@ -27,10 +27,14 @@ use winreg::RegKey;
 
 use crate::backend::WindowsBackend;
 use crate::paste::SendBlocked;
-use crate::popup_state::{clamp_to_area, paste_mode_for, selection_after_delete, PopupState};
+use crate::popup_state::{
+    clamp_popup_size, clamp_to_area, clear_message, clearable_count, paste_mode_for, selection_after_delete,
+    PopupState,
+};
 use crate::ui::{ClipPopup, RowData};
 
-/// Logical size of the popup. Keep in step with `width` / `height` in ui/popup.slint.
+/// Logical size of the popup when it is first made. Keep in step with `width` / `height` in
+/// ui/popup.slint. The size the user drags to is kept for the session (`Inner::size`).
 const POPUP_WIDTH: f32 = 420.0;
 const POPUP_HEIGHT: f32 = 520.0;
 /// How often the watcher checks for focus loss while the popup is open.
@@ -81,15 +85,19 @@ struct Inner {
     preview_open: Cell<bool>,
     /// Run by the header's Settings button (the same action as the tray's Settings).
     on_settings: Rc<dyn Fn()>,
-    /// Run by the header's Clear button (the same action as the tray's Clear).
-    on_clear: Rc<dyn Fn()>,
+    /// Logical size of the window. Starts at the default and follows the resize grip. Kept only
+    /// for this session; it is not saved to disk.
+    size: Cell<(f32, f32)>,
+    /// Counts (total, pinned) taken when the clear overlay opened. The message is rebuilt from
+    /// them when the checkbox changes.
+    clear_counts: Cell<(usize, usize)>,
     /// Shows a short tray notice with the given text.
     on_notice: Rc<dyn Fn(&str)>,
 }
 
 impl Popup {
     /// Create the popup window. The backend must already be started and its hotkeys registered.
-    /// `settings` and `clear` run when the header buttons are clicked.
+    /// `settings` runs when the header's Settings button is clicked.
     ///
     /// Panics if Slint cannot create a window, which means the GUI cannot run at all.
     pub fn new(
@@ -97,7 +105,6 @@ impl Popup {
         config: Rc<RefCell<Config>>,
         backend: Rc<WindowsBackend>,
         settings: Rc<dyn Fn()>,
-        clear: Rc<dyn Fn()>,
         notice: Rc<dyn Fn(&str)>,
     ) -> Self {
         let window = ClipPopup::new().unwrap_or_else(|e| {
@@ -120,7 +127,8 @@ impl Popup {
             thumbs: RefCell::new(HashMap::new()),
             preview_open: Cell::new(false),
             on_settings: settings,
-            on_clear: clear,
+            size: Cell::new((POPUP_WIDTH, POPUP_HEIGHT)),
+            clear_counts: Cell::new((0, 0)),
             on_notice: notice,
         });
         inner.connect();
@@ -150,6 +158,15 @@ impl Popup {
     /// Re-query the store and redraw the rows (for example after a new clip was captured).
     pub fn refresh(&self) {
         self.inner.refresh();
+    }
+
+    /// Show the popup (if hidden) with the clear-history confirmation open. Used by the tray,
+    /// the hotkey, the CLI and the Settings window. Nothing is deleted until the user confirms.
+    pub fn request_clear(&self) {
+        if !self.inner.window.window().is_visible() {
+            self.inner.show();
+        }
+        self.inner.open_clear();
     }
 }
 
@@ -215,7 +232,22 @@ impl Inner {
 
         let w = me.clone();
         self.window.on_clear_requested(move || {
-            with_inner(&w, |i| (i.on_clear)());
+            with_inner(&w, |i| i.open_clear());
+        });
+
+        let w = me.clone();
+        self.window.on_clear_also_pinned_changed(move |also_pinned: bool| {
+            with_inner(&w, |i| i.set_clear_message(also_pinned));
+        });
+
+        let w = me.clone();
+        self.window.on_clear_confirmed(move || {
+            with_inner(&w, |i| i.confirm_clear());
+        });
+
+        let w = me.clone();
+        self.window.on_resize_by(move |dx: f32, dy: f32| {
+            with_inner(&w, |i| i.resize_by(dx, dy));
         });
 
         let w = me.clone();
@@ -249,9 +281,14 @@ impl Inner {
         self.window.set_filter_index(0);
         self.preview_open.set(false);
         self.window.set_preview_text(SharedString::new());
+        self.window.set_clear_open(false);
         self.window.set_dark(use_dark(&theme));
         self.window.set_compact(compact);
         self.refresh();
+
+        // The size the user last dragged to, for this session.
+        let (width, height) = self.size.get();
+        self.window.window().set_size(LogicalSize::new(width, height));
 
         let centered = position == "center";
         self.place(centered);
@@ -269,6 +306,62 @@ impl Inner {
         self.watch.start(TimerMode::Repeated, WATCH_EVERY, move || {
             with_inner(&me, |i| i.watch_tick());
         });
+    }
+
+    /// Open the clear overlay with fresh counts. Pinned items are kept until the checkbox says
+    /// otherwise, so the checkbox starts off.
+    fn open_clear(&self) {
+        let counts = self.history_counts();
+        self.clear_counts.set(counts);
+        self.window.set_clear_also_pinned(false);
+        self.set_clear_message(false);
+        self.window.set_clear_open(true);
+    }
+
+    /// Rebuild the overlay's question and whether Clear is allowed, for the checkbox state.
+    fn set_clear_message(&self, also_pinned: bool) {
+        let (total, pinned) = self.clear_counts.get();
+        self.window.set_clear_message(clear_message(total, pinned, also_pinned).into());
+        self.window
+            .set_clear_can_clear(clearable_count(total, pinned, also_pinned) > 0);
+    }
+
+    /// Delete the items the overlay describes, then close it. Pinned items go only when the
+    /// checkbox is ticked. Nothing happens when nothing is removable.
+    fn confirm_clear(&self) {
+        let also_pinned = self.window.get_clear_also_pinned();
+        let (total, pinned) = self.clear_counts.get();
+        if clearable_count(total, pinned, also_pinned) == 0 {
+            return;
+        }
+        // Store::clear takes keep_pinned, the opposite of the checkbox.
+        if let Err(e) = self.store.borrow().clear(!also_pinned) {
+            tracing::warn!("could not clear history: {e:#}");
+        }
+        self.window.set_clear_open(false);
+        self.refresh();
+    }
+
+    /// Counts for the overlay: (every item, pinned items). A failed count is logged and counts
+    /// as zero, so the overlay says "Nothing to clear.".
+    fn history_counts(&self) -> (usize, usize) {
+        let store = self.store.borrow();
+        let count = |filter, label| match store.count(filter, true) {
+            Ok(n) => usize::try_from(n).unwrap_or(0),
+            Err(e) => {
+                tracing::warn!("could not count {label}: {e:#}");
+                0
+            }
+        };
+        (count(Filter::All, "history"), count(Filter::Pinned, "pinned items"))
+    }
+
+    /// Grow or shrink the window by a drag of the resize grip. The size is clamped and kept.
+    fn resize_by(&self, dx: f32, dy: f32) {
+        let (width, height) = self.size.get();
+        let (width, height) = clamp_popup_size(width + dx, height + dy);
+        self.size.set((width, height));
+        self.window.window().set_size(LogicalSize::new(width, height));
     }
 
     fn hide(&self) {
@@ -522,12 +615,13 @@ impl Inner {
 
     /// Position the popup: at the cursor (clamped into the monitor's work area), or centred.
     ///
-    /// The size is `POPUP_*` logical pixels times the window's scale factor. The code assumes
+    /// The size is the window's logical size times its scale factor. The code assumes
     /// per-monitor DPI awareness, which winit sets up, so physical pixels from Win32 match. The
     /// scale is only right once the window exists, so `show` calls this again after showing.
     fn place(&self, centered: bool) {
         let scale = self.window.window().scale_factor();
-        let size = ((POPUP_WIDTH * scale).round() as i32, (POPUP_HEIGHT * scale).round() as i32);
+        let (width, height) = self.size.get();
+        let size = ((width * scale).round() as i32, (height * scale).round() as i32);
 
         let mut cursor = POINT::default();
         // SAFETY: GetCursorPos writes one POINT through the pointer, and `cursor` is a live local.
@@ -562,7 +656,8 @@ impl Inner {
     /// Hide the popup when it loses focus. Runs every `WATCH_EVERY` while shown.
     ///
     /// Only a loss after the popup held focus counts. If Windows never gave it focus, it stays
-    /// open, and the shortcut still closes it.
+    /// open, and the shortcut still closes it. While the clear overlay is open the popup stays
+    /// up, so the confirmation is not lost to a click elsewhere.
     fn watch_tick(&self) {
         if !self.window.window().is_visible() {
             self.watch.stop();
@@ -580,7 +675,7 @@ impl Inner {
         let foreground = unsafe { GetForegroundWindow() };
         if foreground == hwnd {
             self.focused.set(true);
-        } else if self.focused.get() {
+        } else if self.focused.get() && !self.window.get_clear_open() {
             self.hide();
         }
     }

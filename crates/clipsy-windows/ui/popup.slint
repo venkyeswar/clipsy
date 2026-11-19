@@ -55,10 +55,40 @@ component HeaderButton inherits Rectangle {
     }
 }
 
+// A text button for the clear-history overlay. The colours come from the popup, which knows
+// the theme.
+component ActionButton inherits Rectangle {
+    in property <string> label;
+    in property <color> fill;
+    in property <color> text-color;
+    in property <bool> can-press: true;
+    callback clicked();
+
+    width: 84px;
+    height: 30px;
+    border-radius: 6px;
+    background: root.fill;
+    opacity: root.can-press ? 1 : 0.4;
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.label;
+        font-size: 12px;
+        color: root.text-color;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        enabled: root.can-press;
+        clicked => { root.clicked(); }
+    }
+}
+
 export component ClipPopup inherits Window {
     title: "Clipsy popup";
     no-frame: true;
     always-on-top: true;
+    // Starting size. Rust sets the real size (kept for the session) and clamps it to 320x300..900x1000.
     width: 420px;
     height: 520px;
 
@@ -82,6 +112,21 @@ export component ClipPopup inherits Window {
     callback settings-requested();
     callback clear-requested();
     callback hide-requested();
+    // The window's size changed by this much (logical px) while the resize grip was dragged.
+    callback resize-by(length, length);
+
+    // Clear-history overlay. Rust sets the message and whether Clear is allowed, and handles
+    // the confirm. Slint toggles the checkbox and closes the overlay on Cancel and Escape.
+    in-out property <bool> clear-open: false;
+    in-out property <bool> clear-also-pinned: false;
+    in property <string> clear-message;
+    in property <bool> clear-can-clear: false;
+    callback clear-also-pinned-changed(bool);
+    callback clear-confirmed();
+
+    // Last pointer position (window coordinates) while the resize grip is dragged.
+    property <length> grip-x;
+    property <length> grip-y;
 
     property <color> bg: root.dark ? #202124 : #ffffff;
     property <color> fg: root.dark ? #f1f3f4 : #202124;
@@ -120,7 +165,10 @@ export component ClipPopup inherits Window {
 
     forward-focus: search;
 
+    // Fills the whole window, so the list below takes the height the window has.
     VerticalLayout {
+        width: root.width;
+        height: root.height;
         padding: 12px;
         spacing: 8px;
 
@@ -174,6 +222,18 @@ export component ClipPopup inherits Window {
                 root.query-edited(self.text);
             }
             key-pressed(event) => {
+                // While the clear overlay is open, the search box keeps focus and takes the keys:
+                // Escape cancels, Enter confirms (when Clear is allowed), and typing is blocked.
+                if (root.clear-open) {
+                    if (event.text == Key.Escape) {
+                        root.clear-open = false;
+                        return accept;
+                    }
+                    if (event.text == Key.Return && root.clear-can-clear) {
+                        root.clear-confirmed();
+                    }
+                    return accept;
+                }
                 if (event.text == Key.UpArrow) {
                     root.move-selection(-1);
                     return accept;
@@ -419,6 +479,140 @@ export component ClipPopup inherits Window {
             font-size: 11px;
             horizontal-alignment: center;
             height: 18px;
+        }
+    }
+
+    // Resize grip in the bottom-right corner. Dragging it reports the pointer's movement. The
+    // pointer is measured in window coordinates, so the grip moving with the window does not
+    // change the measurement.
+    grip := Rectangle {
+        x: root.width - 18px;
+        y: root.height - 18px;
+        width: 18px;
+        height: 18px;
+        // Six small dots in a triangle.
+        Rectangle { x: 12px; y: 4px; width: 2px; height: 2px; border-radius: 1px; background: root.muted; }
+        Rectangle { x: 12px; y: 8px; width: 2px; height: 2px; border-radius: 1px; background: root.muted; }
+        Rectangle { x: 8px; y: 8px; width: 2px; height: 2px; border-radius: 1px; background: root.muted; }
+        Rectangle { x: 12px; y: 12px; width: 2px; height: 2px; border-radius: 1px; background: root.muted; }
+        Rectangle { x: 8px; y: 12px; width: 2px; height: 2px; border-radius: 1px; background: root.muted; }
+        Rectangle { x: 4px; y: 12px; width: 2px; height: 2px; border-radius: 1px; background: root.muted; }
+        grip-touch := TouchArea {
+            width: parent.width;
+            height: parent.height;
+            mouse-cursor: nwse-resize;
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                    root.grip-x = self.absolute-position.x + self.mouse-x;
+                    root.grip-y = self.absolute-position.y + self.mouse-y;
+                }
+            }
+            moved => {
+                if (self.pressed) {
+                    let now-x = self.absolute-position.x + self.mouse-x;
+                    let now-y = self.absolute-position.y + self.mouse-y;
+                    root.resize-by(now-x - root.grip-x, now-y - root.grip-y);
+                    root.grip-x = now-x;
+                    root.grip-y = now-y;
+                }
+            }
+        }
+    }
+
+    // Clear-history confirmation. It covers the whole window: the scrim blocks clicks on the
+    // list, and the card sits in the middle. The search box keeps focus and handles the keys.
+    if (root.clear-open): Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        background: #000000a0;
+        // Swallows clicks on the scrim, so nothing behind it is pressed.
+        TouchArea {
+            width: parent.width;
+            height: parent.height;
+        }
+
+        Rectangle {
+            width: root.width - 40px;
+            height: 220px;
+            x: (root.width - self.width) / 2;
+            y: (root.height - self.height) / 2;
+            border-radius: 10px;
+            background: root.bg;
+            border-width: 1px;
+            border-color: root.field-bg;
+
+            VerticalLayout {
+                width: parent.width;
+                height: parent.height;
+                padding: 16px;
+                spacing: 10px;
+
+                Text {
+                    text: "Clear history?";
+                    color: root.fg;
+                    font-size: 14px;
+                    font-weight: 600;
+                    height: 20px;
+                }
+                Text {
+                    text: root.clear-message;
+                    color: root.fg;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                    vertical-stretch: 1;
+                }
+                // Checkbox row: the whole row toggles it, and the message updates live.
+                Rectangle {
+                    height: 22px;
+                    Rectangle {
+                        x: 0px;
+                        y: 3px;
+                        width: 16px;
+                        height: 16px;
+                        border-radius: 3px;
+                        border-width: 1px;
+                        border-color: root.muted;
+                        background: root.clear-also-pinned ? root.accent : transparent;
+                    }
+                    Text {
+                        x: 24px;
+                        width: parent.width - 24px;
+                        height: parent.height;
+                        text: "Also remove pinned items";
+                        color: root.fg;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                    }
+                    TouchArea {
+                        width: parent.width;
+                        height: parent.height;
+                        clicked => {
+                            root.clear-also-pinned = !root.clear-also-pinned;
+                            root.clear-also-pinned-changed(root.clear-also-pinned);
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    height: 30px;
+                    alignment: end;
+                    spacing: 8px;
+                    ActionButton {
+                        label: "Cancel";
+                        fill: root.field-bg;
+                        text-color: root.fg;
+                        clicked => { root.clear-open = false; }
+                    }
+                    ActionButton {
+                        label: "Clear";
+                        fill: root.accent;
+                        text-color: white;
+                        can-press: root.clear-can-clear;
+                        clicked => { root.clear-confirmed(); }
+                    }
+                }
+            }
         }
     }
 }

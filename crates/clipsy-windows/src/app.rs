@@ -19,7 +19,6 @@ use slint::{Timer, TimerMode};
 
 use crate::autostart;
 use crate::backend::WindowsBackend;
-use crate::clear_dialog::confirm_and_clear;
 use crate::hotkey::{migrate_once, shortcut_label, tray_tooltip, FALLBACK, WINDOWS_DEFAULT};
 use crate::popup::Popup;
 use crate::settings::SettingsWindow;
@@ -175,10 +174,8 @@ pub fn run(args: Vec<String>) -> Result<()> {
 
     // The popup creates the Slint window, which also starts Slint's backend on this thread.
     // The tray is created after that, so its menu messages are pumped by the Slint event loop.
-    // The popup's Settings and Clear buttons send the same verbs as the tray menu, so they run
-    // the same actions.
+    // The popup's Settings button sends the same verb as the tray menu, so it runs the same action.
     let popup_settings_verbs = verb_tx.clone();
-    let popup_clear_verbs = verb_tx.clone();
     // The tray does not exist yet when the popup is built, so the popup's notices go through
     // this slot, which is filled right after the tray is created.
     let tray_slot: Rc<RefCell<Option<Rc<Tray>>>> = Rc::new(RefCell::new(None));
@@ -189,9 +186,6 @@ pub fn run(args: Vec<String>) -> Result<()> {
         backend.clone(),
         Rc::new(move || {
             let _ = popup_settings_verbs.send(Verb::Settings);
-        }),
-        Rc::new(move || {
-            let _ = popup_clear_verbs.send(Verb::Clear);
         }),
         Rc::new(move |text: &str| {
             if let Some(tray) = notice_slot.borrow().as_ref() {
@@ -418,12 +412,11 @@ impl App {
         tracing::info!("clipboard recording {}", if paused { "paused" } else { "resumed" });
     }
 
-    /// Clears history after the user confirms in the dialog. Pinned items are kept unless the
-    /// dialog's "Also remove pinned" is ticked. Every clear path (popup, tray, hotkey,
-    /// Settings, CLI) comes through here.
+    /// Opens the popup with the clear-history confirmation showing. Nothing is deleted until the
+    /// user confirms there. Pinned items are kept unless "Also remove pinned" is ticked. Every
+    /// clear path (popup header, tray, hotkey, Settings, CLI) comes through here.
     fn clear_history(&self) {
-        let popup = self.popup.clone();
-        confirm_and_clear(self.store.clone(), move || popup.refresh());
+        self.popup.request_clear();
     }
 
     fn show_settings(&self) {

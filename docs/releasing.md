@@ -23,12 +23,20 @@ Example for version `0.4.0`: `clipsy_0.4.0-1_amd64.deb`, `clipsy-0.4.0-windows-x
 Release notes are generated automatically from the commit messages since the
 previous tag.
 
-## Before you start
+## Before you tag
 
-1. Make sure `main` (or the branch you release from) is pushed and CI is green.
-2. Set the version in the workspace `Cargo.toml` (the `version = "..."` line under
-   `[workspace.package]`) to the version you want, for example `0.4.0`. Commit it.
-   The release workflow stops with an error if the tag and this version differ.
+1. **Pushing a tag also starts the Snap workflow.** A `v*` tag triggers
+   `.github/workflows/snap.yml` as well as the Release workflow. It builds the Snap
+   package. It uploads to the Snap Store "edge" channel only if the repository secret
+   `SNAPCRAFT_STORE_CREDENTIALS` is set. If the secret is not set, nothing is uploaded.
+2. **Do a dry run first.** On GitHub, run the **Release** workflow with **Run workflow**
+   (workflow_dispatch) on the branch. Download the three artifacts (`deb`,
+   `windows-zip`, `windows-setup`) and check them. Also make sure the **Windows** job
+   in the **CI** workflow is green.
+3. **The tag must equal the workspace version.** Set the version in the workspace
+   `Cargo.toml` (the `version = "..."` line under `[workspace.package]`) to the version
+   you want, for example `0.4.0`, and commit it first. The workflow derives the
+   version from the tag and stops with an error if the two differ.
 
 ## Cut a release
 
@@ -82,8 +90,11 @@ names, so the names above must not change.
 Download the files, then check them against `SHA256SUMS`:
 
 ```bash
-sha256sum -c SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
 ```
+
+`--ignore-missing` skips the files you did not download, so only the files you
+have are checked.
 
 On Windows, PowerShell can show one hash:
 

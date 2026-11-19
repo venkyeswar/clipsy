@@ -108,7 +108,10 @@ jobs:
 
       - name: Build clipsy.exe
         shell: pwsh
-        run: cargo build --release -p clipsy-windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo build --release -p clipsy-windows
+          if ($LASTEXITCODE -ne 0) { throw "cargo build failed with exit code $LASTEXITCODE" }
 
       - name: Stage files
         shell: pwsh
@@ -133,7 +136,10 @@ jobs:
 
       - name: Install Inno Setup
         shell: pwsh
-        run: choco install innosetup -y --no-progress
+        run: |
+          $ErrorActionPreference = 'Stop'
+          choco install innosetup -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "choco install innosetup failed with exit code $LASTEXITCODE" }
 
       - name: Build the installer
         shell: pwsh

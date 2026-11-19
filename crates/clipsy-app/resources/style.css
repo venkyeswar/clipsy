@@ -115,13 +115,54 @@
   background-color: alpha(@window_fg_color, 0.5);
 }
 
-/* Setup box for the GNOME extension: the command in a small rounded box. */
-.clipsy-cmd {
+/* GNOME setup card (welcome window and Settings): one rounded card. */
+.setup-card {
+  padding: 16px;
+  border-radius: 16px;
+  background-color: @card_bg_color;
+  color: @card_fg_color;
+  border: 1px solid alpha(@window_fg_color, 0.12);
+}
+
+/* Primary copy button: a bit larger, and it eases to green when it says "Copied". */
+.setup-card button.setup-copy {
+  padding: 8px 20px;
+  min-height: 36px;
+  transition: background-color 200ms ease-out, color 200ms ease-out;
+}
+
+.setup-card button.setup-copy.copied {
+  background-image: none;
+  background-color: @success_bg_color;
+  color: @success_fg_color;
+}
+
+/* "Show the command" disclosure: plain link-style text in the accent color. */
+.setup-link {
+  color: @accent_color;
+  font-weight: 600;
+}
+
+/* The command, in a small rounded box. It wraps, so nothing runs off the card. */
+.command-box {
   font-family: monospace;
-  font-size: smaller;
+  font-size: 0.85em;
+  padding: 10px;
+  border-radius: 10px;
   background-color: alpha(@window_fg_color, 0.07);
-  border-radius: 8px;
-  padding: 6px 10px;
+}
+
+/* Welcome step dots: one small dot per page. The current page is a wider pill. */
+.step-dot {
+  min-width: 8px;
+  min-height: 8px;
+  border-radius: 999px;
+  background: alpha(@window_fg_color, 0.25);
+}
+
+.step-dot.current {
+  min-width: 22px;
+  background: @accent_bg_color;
 }
 
 /* "Connected" line: green in light and dark. */

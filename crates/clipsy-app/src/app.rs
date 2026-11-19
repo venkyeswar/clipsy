@@ -59,7 +59,7 @@ pub fn connect(app: &adw::Application) {
 
 fn start(app: &adw::Application) -> anyhow::Result<()> {
     load_css();
-    install_icon();
+    register_app_icons();
 
     // Missing or broken values fall back to the defaults (the core logs a warning).
     let config = Config::load();
@@ -403,21 +403,108 @@ fn load_css() {
 }
 
 
-/// Makes sure the app icon exists in the user's icon folder, so windows can show it
-/// even when Clipsy runs from a build folder instead of an installed package.
-fn install_icon() {
-    const SVG: &[u8] = include_bytes!("../../../data/icons/io.github.clipsy.Clipsy.svg");
-    let Some(home) = std::env::var_os("HOME") else { return };
-    let dir = std::path::Path::new(&home).join(".local/share/icons/hicolor/scalable/apps");
-    let file = dir.join("io.github.clipsy.Clipsy.svg");
-    if file.exists() && std::fs::read(&file).is_ok_and(|b| b == SVG) {
+/// The app's own icons. The SVG files are compiled into the binary, so the icons
+/// exist even when Clipsy runs from a build folder instead of an installed package.
+const APP_ICONS: &[(&str, &[u8])] = &[
+    (
+        "io.github.clipsy.Clipsy",
+        include_bytes!("../../../data/icons/io.github.clipsy.Clipsy.svg"),
+    ),
+    (
+        "io.github.clipsy.Clipsy-symbolic",
+        include_bytes!("../../../data/icons/io.github.clipsy.Clipsy-symbolic.svg"),
+    ),
+];
+
+/// Minimal theme index. GTK only treats a folder as an icon theme when it has one.
+const ICON_INDEX_THEME: &str = "[Icon Theme]\n\
+Name=hicolor\n\
+Comment=Clipsy app icons\n\
+Directories=scalable/apps\n\
+Scalable=Directories\n\
+\n\
+[scalable/apps]\n\
+Size=64\n\
+Type=Scalable\n\
+MinSize=8\n\
+MaxSize=512\n";
+
+/// Folder added to the icon theme search path. It is laid out like an icon theme:
+/// `<root>/hicolor/index.theme` and `<root>/hicolor/scalable/apps/<name>.svg`.
+fn app_icon_root() -> PathBuf {
+    glib::user_cache_dir().join("clipsy").join("icons")
+}
+
+/// Folder that holds the app icon files inside `root`.
+fn app_icon_dir(root: &std::path::Path) -> PathBuf {
+    root.join("hicolor").join("scalable").join("apps")
+}
+
+/// Path of one app icon file inside `root`.
+fn app_icon_path(root: &std::path::Path, icon_name: &str) -> PathBuf {
+    app_icon_dir(root).join(format!("{icon_name}.svg"))
+}
+
+/// Writes the icon files and the theme index under `root`. A file is only written
+/// when it is missing or its size differs from the embedded copy.
+fn write_app_icons(root: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(app_icon_dir(root))?;
+    for (name, svg) in APP_ICONS {
+        let path = app_icon_path(root, name);
+        let up_to_date = std::fs::metadata(&path).is_ok_and(|m| m.len() == svg.len() as u64);
+        if !up_to_date {
+            std::fs::write(&path, svg)?;
+        }
+    }
+    let index = root.join("hicolor").join("index.theme");
+    let up_to_date = std::fs::metadata(&index).is_ok_and(|m| m.len() == ICON_INDEX_THEME.len() as u64);
+    if !up_to_date {
+        std::fs::write(&index, ICON_INDEX_THEME)?;
+    }
+    Ok(())
+}
+
+/// Makes the app icons available by name (`APP_ID`, the symbolic one). Does nothing
+/// when the icon theme already has them, which is the case for installed packages.
+fn register_app_icons() {
+    let Some(display) = gtk::gdk::Display::default() else { return };
+    let theme = gtk::IconTheme::for_display(&display);
+    if APP_ICONS.iter().all(|(name, _)| theme.has_icon(name)) {
         return;
     }
-    if std::fs::create_dir_all(&dir).is_ok() && std::fs::write(&file, SVG).is_ok() {
-        if let Some(display) = gtk::gdk::Display::default() {
-            // Re-adding the path makes GTK rescan the icon folders.
-            gtk::IconTheme::for_display(&display)
-                .add_search_path(std::path::Path::new(&home).join(".local/share/icons"));
+    let root = app_icon_root();
+    match write_app_icons(&root) {
+        // Adding the path makes GTK scan it for icons.
+        Ok(()) => theme.add_search_path(&root),
+        Err(err) => tracing::debug!("could not write app icons to {}: {err}", root.display()),
+    }
+}
+
+#[cfg(test)]
+mod icon_tests {
+    use super::*;
+
+    #[test]
+    fn icon_path_follows_theme_layout() {
+        let root = std::path::Path::new("/cache/clipsy/icons");
+        assert_eq!(
+            app_icon_path(root, "io.github.clipsy.Clipsy"),
+            std::path::Path::new("/cache/clipsy/icons/hicolor/scalable/apps/io.github.clipsy.Clipsy.svg")
+        );
+    }
+
+    #[test]
+    fn writes_icons_and_repairs_damaged_files() {
+        let dir = tempfile::tempdir().unwrap();
+        write_app_icons(dir.path()).unwrap();
+        for (name, svg) in APP_ICONS {
+            let path = app_icon_path(dir.path(), name);
+            assert_eq!(std::fs::read(&path).unwrap().as_slice(), *svg);
         }
+        // A damaged (wrong size) file is replaced on the next run.
+        let path = app_icon_path(dir.path(), APP_ICONS[0].0);
+        std::fs::write(&path, b"x").unwrap();
+        write_app_icons(dir.path()).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap().as_slice(), APP_ICONS[0].1);
     }
 }

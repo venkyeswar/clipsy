@@ -20,9 +20,14 @@ use crate::gnome_install::{self, Status};
 /// Where a package install puts the extension.
 const SYSTEM_EXTENSION_DIR: &str = "/usr/share/gnome-shell/extensions";
 
+// Developer preview: CLIPSY_PREVIEW_SETUP=missing forces the setup card on any session.
+fn preview_missing() -> bool {
+    std::env::var("CLIPSY_PREVIEW_SETUP").as_deref() == Ok("missing")
+}
+
 /// True while the backend says the extension still needs to be set up.
 fn still_needed(state: &State) -> bool {
-    state.backend.borrow().setup_needed() == Some(SetupNeeded::GnomeExtension)
+    preview_missing() || state.backend.borrow().setup_needed() == Some(SetupNeeded::GnomeExtension)
 }
 
 /// Turns the extension on. `gnome-extensions enable` only works for extensions
@@ -65,19 +70,86 @@ fn dim_label(text: &str) -> gtk::Label {
     label
 }
 
-/// The Terminal command and the log-out step, for when Clipsy could not install
-/// the extension itself.
+/// Icon and label of the copy button: "Copy command", then "Copied" for a moment.
+fn copy_button_face(copied: bool) -> (&'static str, &'static str) {
+    if copied {
+        ("object-select-symbolic", "Copied")
+    } else {
+        ("edit-copy-symbolic", "Copy command")
+    }
+}
+
+/// Sets the icon and label of the copy button, and keeps its accessible name in step.
+fn set_copy_face(button: &gtk::Button, copied: bool) {
+    let (icon, label) = copy_button_face(copied);
+    let content = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    content.set_halign(gtk::Align::Center);
+    content.append(&gtk::Image::from_icon_name(icon));
+    content.append(&gtk::Label::new(Some(label)));
+    button.set_child(Some(&content));
+    button.update_property(&[gtk::accessible::Property::Label(label)]);
+    if copied {
+        button.add_css_class("copied");
+    } else {
+        button.remove_css_class("copied");
+    }
+}
+
+/// The copy button, the log-out step and the collapsed command, for when Clipsy
+/// could not install the extension itself. The command text is only ever shown
+/// inside the "Show the command" expander, which starts collapsed.
 fn command_steps(root: &gtk::Box) {
     let (cmd, hint) = command();
 
-    // Step 1: the command and a Copy button.
-    let step1 = gtk::Label::new(Some("1. Copy this command, paste it in a Terminal (Ctrl+Alt+T) and press Enter"));
-    step1.set_xalign(0.0);
-    step1.set_wrap(true);
-    step1.add_css_class("caption-heading");
+    let sentence = dim_label("Copy the command below, open a terminal, paste it and press Enter.");
+    root.append(&sentence);
+
+    // The one primary action: copy the command, then confirm for about two seconds.
+    let copy = gtk::Button::new();
+    copy.add_css_class("suggested-action");
+    copy.add_css_class("pill");
+    copy.add_css_class("setup-copy");
+    copy.set_halign(gtk::Align::Start);
+    copy.set_tooltip_text(Some("Copy the command to the clipboard"));
+    set_copy_face(&copy, false);
+    {
+        let cmd = cmd.clone();
+        // The pending "back to Copy" timer, so a second click restarts it.
+        let timer: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+        copy.connect_clicked(move |button| {
+            button.display().clipboard().set_text(&cmd);
+            set_copy_face(button, true);
+            if let Some(id) = timer.borrow_mut().take() {
+                id.remove();
+            }
+            // A weak ref keeps a closed window from leaking.
+            let weak = button.downgrade();
+            let timer_c = timer.clone();
+            let id = glib::timeout_add_local_once(Duration::from_secs(2), move || {
+                // The source is gone once it has run, so forget its id first.
+                timer_c.borrow_mut().take();
+                if let Some(button) = weak.upgrade() {
+                    set_copy_face(&button, false);
+                }
+            });
+            *timer.borrow_mut() = Some(id);
+        });
+    }
+    root.append(&copy);
+
+    if let Some(hint) = hint {
+        let hint = dim_label(hint);
+        hint.add_css_class("caption");
+        root.append(&hint);
+    }
+
+    // The command itself: collapsed by default, selectable and wrapped so it stays readable.
+    let title = gtk::Label::new(Some("Show the command"));
+    title.add_css_class("setup-link");
+    title.set_xalign(0.0);
 
     let cmd_label = gtk::Label::new(Some(&cmd));
-    cmd_label.add_css_class("clipsy-cmd");
+    cmd_label.add_css_class("command-box");
     // Selectable, but not focusable, so it does not open with all text selected.
     cmd_label.set_selectable(true);
     cmd_label.set_focusable(false);
@@ -90,42 +162,24 @@ fn command_steps(root: &gtk::Box) {
     cmd_label.set_xalign(0.0);
     cmd_label.set_hexpand(true);
 
-    let copy = gtk::Button::with_label("Copy");
-    copy.set_valign(gtk::Align::Center);
-    {
-        let cmd = cmd.clone();
-        copy.connect_clicked(move |button| {
-            button.display().clipboard().set_text(&cmd);
-            button.set_label("Copied");
-            // Back to "Copy" after a moment. A weak ref keeps a closed window from leaking.
-            let weak = button.downgrade();
-            glib::timeout_add_local_once(Duration::from_millis(1500), move || {
-                if let Some(button) = weak.upgrade() {
-                    button.set_label("Copy");
-                }
-            });
-        });
-    }
+    let expander = gtk::Expander::new(None);
+    expander.set_label_widget(Some(&title));
+    expander.set_expanded(false);
+    expander.set_child(Some(&cmd_label));
+    expander.add_css_class("setup-expander");
+    root.append(&expander);
 
-    let cmd_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    cmd_row.append(&cmd_label);
-    cmd_row.append(&copy);
+    let why = dim_label("On GNOME with Wayland, Clipsy needs its small GNOME extension to see what you copy and to use the shortcut.");
+    why.add_css_class("caption");
+    root.append(&why);
 
-    // Step 2: log out and in.
-    let step2 = gtk::Label::new(Some("2. Log out, then log back in"));
+    // Log out and in, last.
+    let step2 = gtk::Label::new(Some("Then log out and log back in once."));
     step2.set_xalign(0.0);
     step2.set_wrap(true);
     step2.add_css_class("caption-heading");
     let step2_note = dim_label("GNOME turns on new extensions only at login. Clipsy then connects by itself.");
     step2_note.add_css_class("caption");
-
-    root.append(&step1);
-    root.append(&cmd_row);
-    if let Some(hint) = hint {
-        let hint = dim_label(hint);
-        hint.add_css_class("caption");
-        root.append(&hint);
-    }
     root.append(&step2);
     root.append(&step2_note);
 }
@@ -135,7 +189,9 @@ pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
     if !still_needed(state) {
         return None;
     }
-    let root = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    // One rounded card (CSS `setup-card`): the background and padding live in style.css.
+    let root = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    root.add_css_class("setup-card");
     let heading = |text: &str| {
         let title = gtk::Label::new(Some(text));
         title.add_css_class("heading");
@@ -143,7 +199,8 @@ pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
         title.set_wrap(true);
         title
     };
-    match gnome_install::status() {
+    let status = if preview_missing() { Status::Missing } else { gnome_install::status() };
+    match status {
         // Installed and on: GNOME starts it at the next login.
         Status::Enabled => {
             root.append(&heading("Almost ready"));
@@ -180,12 +237,9 @@ pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
             root.append(&button);
             root.append(&result);
         }
-        // Clipsy could not install it: show the Terminal command.
+        // Clipsy could not install it: show the copy button and the collapsed command.
         Status::Missing => {
-            root.append(&heading("One more step for Wayland"));
-            root.append(&dim_label(
-                "On GNOME with Wayland, Clipsy needs its small GNOME extension to see what you copy and to use the shortcut.",
-            ));
+            root.append(&heading("One quick step to finish setup"));
             command_steps(&root);
         }
     }
@@ -210,21 +264,12 @@ pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
     root.append(&waiting_row);
     root.append(&done_row);
 
-    // The `card` class paints the background; the padding sits inside it.
-    root.set_margin_top(12);
-    root.set_margin_bottom(12);
-    root.set_margin_start(12);
-    root.set_margin_end(12);
-    let outer = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    outer.add_css_class("card");
-    outer.append(&root);
-
     // Poll every 2 s while the box is on screen. The timer is stopped on unmap.
     let timer: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
     {
-        let (state, timer, weak) = (state.clone(), timer.clone(), outer.downgrade());
+        let (state, timer, weak) = (state.clone(), timer.clone(), root.downgrade());
         let (waiting_row, done_row) = (waiting_row.clone(), done_row.clone());
-        outer.connect_map(move |_| {
+        root.connect_map(move |_| {
             if timer.borrow().is_some() {
                 return;
             }
@@ -247,18 +292,25 @@ pub fn setup_box(state: &Rc<State>) -> Option<gtk::Widget> {
             *timer.borrow_mut() = Some(id);
         });
     }
-    outer.connect_unmap(move |_| {
+    root.connect_unmap(move |_| {
         if let Some(id) = timer.borrow_mut().take() {
             id.remove();
         }
     });
 
-    Some(outer.upcast())
+    Some(root.upcast())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::enable_command;
+    use super::{copy_button_face, enable_command};
+
+    /// The copy button shows its icon and label, and the label is the accessible name.
+    #[test]
+    fn copy_button_says_copy_then_copied() {
+        assert_eq!(copy_button_face(false), ("edit-copy-symbolic", "Copy command"));
+        assert_eq!(copy_button_face(true), ("object-select-symbolic", "Copied"));
+    }
 
     /// Runs the generated command against a fake `gsettings` and checks the result.
     #[test]

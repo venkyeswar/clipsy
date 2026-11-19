@@ -46,7 +46,7 @@ pub fn verb_name(v: Verb) -> &'static str {
 }
 
 #[cfg(windows)]
-use anyhow::Context;
+use anyhow::{bail, Context};
 #[cfg(windows)]
 use std::fs::{File, OpenOptions};
 #[cfg(windows)]
@@ -56,7 +56,7 @@ use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 #[cfg(windows)]
 use std::time::{Duration, Instant};
 #[cfg(windows)]
-use windows::core::{HRESULT, PCWSTR};
+use windows::core::{HRESULT, PCWSTR, PWSTR};
 #[cfg(windows)]
 use windows::Win32::Foundation::{
     GetLastError, LocalFree, BOOL, ERROR_ALREADY_EXISTS, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY,
@@ -64,10 +64,13 @@ use windows::Win32::Foundation::{
 };
 #[cfg(windows)]
 use windows::Win32::Security::Authorization::{
-    ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
 };
 #[cfg(windows)]
-use windows::Win32::Security::{PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES};
+use windows::Win32::Security::{
+    GetTokenInformation, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TokenUser, TOKEN_QUERY,
+    TOKEN_USER,
+};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::PIPE_ACCESS_INBOUND;
 #[cfg(windows)]
@@ -76,16 +79,11 @@ use windows::Win32::System::Pipes::{
     PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
 };
 #[cfg(windows)]
-use windows::Win32::System::Threading::CreateMutexW;
+use windows::Win32::System::Threading::{CreateMutexW, GetCurrentProcess, OpenProcessToken};
 
 /// Mutex name in the session-local namespace (one per logged-in user session).
 #[cfg(windows)]
 const MUTEX_NAME: &str = r"Local\Clipsy-Instance";
-
-/// SDDL for the pipe ACL: full access for the owner (the current user) and for
-/// SYSTEM only. Other accounts, including other local users, get no access.
-#[cfg(windows)]
-const PIPE_SDDL: &str = "D:P(A;;GA;;;OW)(A;;GA;;;SY)";
 
 /// How long a second process keeps retrying to reach the primary.
 #[cfg(windows)]
@@ -215,14 +213,17 @@ pub fn serve(tx: Sender<Verb>) {
 #[cfg(windows)]
 fn serve_loop(name: &str, tx: Sender<Verb>) {
     let wname = wide(name);
-    let security = match PipeSecurity::owner_only() {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("pipe server not started: {e:#}");
-            return;
-        }
-    };
     loop {
+        // Built on every pass so that a failure (for example a token query error)
+        // is retried like the other failures below, instead of ending the server.
+        let security = match PipeSecurity::for_current_user() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("pipe server cannot build its ACL, retrying: {e:#}");
+                std::thread::sleep(RETRY_DELAY);
+                continue;
+            }
+        };
         let pipe = match create_pipe(&wname, &security) {
             Ok(p) => p,
             Err(e) => {
@@ -320,7 +321,81 @@ fn connect_pipe(pipe: &OwnedHandle) -> windows::core::Result<()> {
     }
 }
 
-/// Owner-and-SYSTEM-only security attributes for the pipe, built from `PIPE_SDDL`.
+/// Builds the pipe ACL SDDL for one user SID: full access for that user and for
+/// SYSTEM, nothing for anyone else (including other local users).
+///
+/// The user's SID is used rather than the `OW` (owner rights) alias: the pipe's
+/// owner is the elevated token's default owner (Administrators) when Clipsy runs
+/// elevated, which would lock out the same user's non-elevated `clipsy-windows`.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn sddl_for_user(sid: &str) -> String {
+    format!("D:P(A;;GA;;;{sid})(A;;GA;;;SY)")
+}
+
+/// SID of the current process token's user, as text (for example `S-1-5-21-...`).
+#[cfg(windows)]
+fn user_sid_string() -> anyhow::Result<String> {
+    // SAFETY: GetCurrentProcess returns a pseudo-handle that needs no closing.
+    let process = unsafe { GetCurrentProcess() };
+    let mut token = HANDLE(std::ptr::null_mut());
+    // SAFETY: `token` is a valid out-pointer. On success it holds a new handle
+    // that OwnedHandle closes on every path below.
+    unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) }
+        .context("could not open the process token")?;
+    // SAFETY: `token.0` is a handle we just received and nothing else owns.
+    let token = unsafe { OwnedHandle::from_raw_handle(token.0) };
+    let token_handle = HANDLE(token.as_raw_handle());
+
+    // First call with no buffer: only asks for the required size. It fails with
+    // ERROR_INSUFFICIENT_BUFFER by design, so its result is ignored.
+    let mut len = 0u32;
+    // SAFETY: a null buffer with length 0 is allowed; `len` is a valid out-pointer.
+    let _ = unsafe { GetTokenInformation(token_handle, TokenUser, None, 0, &mut len) };
+    if len == 0 {
+        bail!("could not size the process token information");
+    }
+
+    // Vec<usize> gives the pointer alignment that TOKEN_USER needs.
+    let words = (len as usize).div_ceil(std::mem::size_of::<usize>());
+    let mut buf = vec![0usize; words];
+    // SAFETY: buf holds at least `len` bytes with TOKEN_USER alignment. On success
+    // it contains a TOKEN_USER whose Sid points into buf itself.
+    unsafe {
+        GetTokenInformation(
+            token_handle,
+            TokenUser,
+            Some(buf.as_mut_ptr().cast()),
+            len,
+            &mut len,
+        )
+    }
+    .context("could not read the process user SID")?;
+    // SAFETY: after the successful call above, buf starts with a valid TOKEN_USER.
+    // buf is still alive, so the Sid pointer it holds is valid to read here.
+    let sid = unsafe { (*buf.as_ptr().cast::<TOKEN_USER>()).User.Sid };
+
+    let mut sid_text = PWSTR::null();
+    // SAFETY: `sid` is valid (see above) and `sid_text` is a valid out-pointer.
+    // On success the system allocates the string, which is freed below.
+    unsafe { ConvertSidToStringSidW(sid, &mut sid_text) }
+        .context("could not convert the user SID to text")?;
+    // SAFETY: sid_text is a NUL-terminated UTF-16 string that the system allocated
+    // and that is freed only after this read.
+    let text = unsafe { sid_text.to_string() };
+    // SAFETY: frees the buffer allocated by ConvertSidToStringSidW, exactly once.
+    let _ = unsafe { LocalFree(HLOCAL(sid_text.0.cast())) };
+    let text = text.context("user SID text is not valid UTF-16")?;
+
+    // The text goes into the SDDL string, so accept only the SID shape
+    // S-<digits and dashes>. Anything else is refused rather than embedded.
+    if !text.starts_with("S-") || !text.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
+        bail!("unexpected user SID text: {text:?}");
+    }
+    Ok(text)
+}
+
+/// Security attributes for the pipe, granting access only to the current user
+/// and SYSTEM (see `sddl_for_user`).
 #[cfg(windows)]
 struct PipeSecurity {
     descriptor: PSECURITY_DESCRIPTOR,
@@ -329,8 +404,8 @@ struct PipeSecurity {
 
 #[cfg(windows)]
 impl PipeSecurity {
-    fn owner_only() -> anyhow::Result<Self> {
-        let sddl = wide(PIPE_SDDL);
+    fn for_current_user() -> anyhow::Result<Self> {
+        let sddl = wide(&sddl_for_user(&user_sid_string()?));
         let mut descriptor = PSECURITY_DESCRIPTOR(std::ptr::null_mut());
         // SAFETY: `sddl` is NUL-terminated and alive for the call, and `descriptor`
         // is a valid out-pointer. On success Windows allocates the descriptor, and
@@ -385,6 +460,15 @@ mod tests {
         assert_eq!(parse_verb(""), None);
         assert_eq!(parse_verb("explode"), None);
         assert_eq!(parse_verb("TOGGLE"), None);
+    }
+
+    #[test]
+    fn sddl_contains_user_sid_and_system() {
+        let sddl = sddl_for_user("S-1-5-21-1-2-3-1001");
+        assert!(sddl.starts_with("D:P"));
+        assert!(sddl.contains("(A;;GA;;;S-1-5-21-1-2-3-1001)"));
+        assert!(sddl.contains("(A;;GA;;;SY)"));
+        assert!(!sddl.contains(";OW)"));
     }
 
     #[test]

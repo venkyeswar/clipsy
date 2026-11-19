@@ -106,6 +106,7 @@ function DesktopArt() {
     <div aria-hidden="true" className="mt-auto flex flex-wrap gap-1.5 pt-4">
       <span className="rounded-md bg-brand-teal-soft px-2 py-1 font-mono text-xs text-brand-teal">X11</span>
       <span className="rounded-md bg-brand-violet-soft px-2 py-1 font-mono text-xs text-brand-violet">GNOME Wayland</span>
+      <span className="rounded-md bg-brand-yellow-soft px-2 py-1 font-mono text-xs text-brand-yellow">Windows 10/11</span>
     </div>
   );
 }
@@ -147,7 +148,7 @@ const features: Feature[] = [
   },
   {
     name: "Works where you work",
-    description: "Runs on X11 and on GNOME with Wayland.",
+    description: "Runs on Linux (X11 and GNOME with Wayland) and on Windows 10 and 11.",
     art: <DesktopArt />,
     className: "",
   },

@@ -1,13 +1,15 @@
 import { cn } from "cn";
 import { Keycap } from "@/components/keycap";
 import { Separator } from "@/components/ui/separator";
-import { config } from "@/config";
+import { shortcutFor } from "@/config";
+import { useSelectedPlatform } from "@/lib/platform-context";
 
 type Shortcut = { keys: string[]; label: string };
 
 export function ShortcutsSection() {
+  const { platform } = useSelectedPlatform();
   const shortcuts: Shortcut[] = [
-    { keys: config.shortcut, label: "Open Clipsy" },
+    { keys: shortcutFor(platform), label: "Open Clipsy" },
     { keys: ["↵"], label: "Paste the selected item" },
     { keys: ["⇧", "↵"], label: "Paste as plain text" },
     { keys: ["⌫"], label: "Remove the selected item" },

@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
-import { FileText, Image as ImageIcon, Search, Star, Trash2, Type, type LucideIcon } from "lucide-react";
+import { Copy, FileText, Image as ImageIcon, Search, Star, Trash2, Type, type LucideIcon } from "lucide-react";
 import { cn } from "cn";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsIndicator, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Keycap } from "@/components/keycap";
+import { config } from "@/config";
 import { clearTab, countClearable, visibleItems, type DemoItem, type DemoKind, type DemoTab } from "@/lib/demo";
 
 const SEED: DemoItem[] = [
@@ -31,6 +33,12 @@ const OPENING_ITEMS = SEED.filter((item) => !ARRIVALS.includes(item.id));
 const FINAL_ITEMS = SEED.map((item) => (item.id === STAR_ID ? { ...item, pinned: true } : item));
 
 const KIND_ICON: Record<DemoKind, LucideIcon> = { text: Type, image: ImageIcon, files: FileText };
+/** Each kind gets one of the logo colours, so rows scan by type at a glance. */
+const KIND_TONE: Record<DemoKind, string> = {
+  text: "bg-brand-teal-soft text-brand-teal",
+  image: "bg-brand-violet-soft text-brand-violet",
+  files: "bg-brand-yellow-soft text-brand-yellow",
+};
 
 const TAB_META: Record<DemoTab, { label: string; clear: string; noun: string }> = {
   all: { label: "All", clear: "everything", noun: "items" },
@@ -40,6 +48,13 @@ const TAB_META: Record<DemoTab, { label: string; clear: string; noun: string }> 
   pinned: { label: "Pinned", clear: "pinned items", noun: "pinned items" },
 };
 const TABS: DemoTab[] = ["all", "text", "images", "files", "pinned"];
+
+/** The opening beat: the shortcut keys press one by one, then the window opens. */
+const KEY_PRESS_AT = [150, 300, 450];
+const KEY_RELEASE_AT = 800;
+const WINDOW_DELAY_S = 0.65;
+/** Everything after the window has opened is shifted by this much. */
+const OFFSET = 900;
 
 function prefersReducedMotion(): boolean {
   return (
@@ -64,6 +79,8 @@ export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [includePinned, setIncludePinned] = useState(false);
   const [lastArrived, setLastArrived] = useState<number | null>(null);
+  const [chipId, setChipId] = useState<number | null>(null);
+  const [pressedKeys, setPressedKeys] = useState(0);
   const playingRef = useRef(startPlaying);
   const timersRef = useRef<number[]>([]);
   const rowRefs = useRef(new Map<number, HTMLLIElement>());
@@ -78,6 +95,8 @@ export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
     setItems(FINAL_ITEMS);
     setQuery("");
     setLastArrived(null);
+    setChipId(null);
+    setPressedKeys(0);
   }, []);
 
   useEffect(() => {
@@ -87,24 +106,28 @@ export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
       if (!seed) return;
       setItems((prev) => (prev.some((item) => item.id === id) ? prev : [seed, ...prev]));
       setLastArrived(id);
+      setChipId(id);
     };
     const steps: [number, () => void][] = [
-      [500, () => arrive(4)],
-      [1100, () => arrive(2)],
-      [1700, () => arrive(1)],
-      [2500, () => setQuery("g")],
-      [2620, () => setQuery("gi")],
-      [2740, () => setQuery("git")],
-      [3900, () => setQuery("")],
+      ...KEY_PRESS_AT.map((at, index): [number, () => void] => [at, () => setPressedKeys(index + 1)]),
+      [KEY_RELEASE_AT, () => setPressedKeys(0)],
+      [OFFSET + 500, () => arrive(4)],
+      [OFFSET + 1100, () => arrive(2)],
+      [OFFSET + 1700, () => arrive(1)],
+      [OFFSET + 2400, () => setChipId(null)],
+      [OFFSET + 2500, () => setQuery("g")],
+      [OFFSET + 2620, () => setQuery("gi")],
+      [OFFSET + 2740, () => setQuery("git")],
+      [OFFSET + 3900, () => setQuery("")],
       [
-        4400,
+        OFFSET + 4400,
         () => {
           setItems((prev) => prev.map((item) => (item.id === STAR_ID ? { ...item, pinned: true } : item)));
           setLastArrived(null);
         },
       ],
       [
-        4900,
+        OFFSET + 4900,
         () => {
           playingRef.current = false;
           setLastArrived(null);
@@ -121,6 +144,7 @@ export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
   const meta = TAB_META[tab];
   const clearable = countClearable(items, tab, includePinned);
   const canClear = countClearable(items, tab, true) > 0;
+  const chip = chipId === null ? undefined : SEED.find((item) => item.id === chipId);
 
   function select(id: number) {
     setSelectedId(id);
@@ -183,128 +207,202 @@ export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="w-full min-w-0 max-w-md">
+      <div className="relative isolate mx-auto w-full max-w-[22.5rem] pt-8">
+        {/* Depth: a soft glow and the logo's violet and yellow sheets fanned behind the window. */}
+        <div aria-hidden="true" className="hero-glow pointer-events-none absolute -inset-x-16 -inset-y-10 -z-20" />
+        <motion.div
+          aria-hidden="true"
+          initial={startPlaying ? { rotate: 0, opacity: 0 } : false}
+          animate={{ rotate: -7, opacity: 1 }}
+          transition={{ delay: WINDOW_DELAY_S + 0.1, type: "spring", stiffness: 160, damping: 18 }}
+          className="sheet-violet absolute inset-x-5 top-14 bottom-16 -z-10 origin-bottom rounded-3xl"
+        />
+        <motion.div
+          aria-hidden="true"
+          initial={startPlaying ? { rotate: 0, opacity: 0 } : false}
+          animate={{ rotate: 6, opacity: 1 }}
+          transition={{ delay: WINDOW_DELAY_S + 0.16, type: "spring", stiffness: 160, damping: 18 }}
+          className="sheet-yellow absolute inset-x-5 top-14 bottom-16 -z-10 origin-bottom rounded-3xl"
+        />
+
+        {/* The shortcut, pressed during the opening beat. */}
         <div
-          role="region"
-          aria-label="Interactive Clipsy demo"
-          onPointerDownCapture={stopAutoplay}
-          onKeyDownCapture={stopAutoplay}
-          className="w-full min-w-0 max-w-full rounded-2xl border border-border bg-card p-3 text-card-foreground shadow-lg sm:p-4"
+          role="group"
+          aria-label="Default shortcut"
+          className="absolute top-0 left-3 z-20 flex items-center gap-1 rounded-xl border border-border bg-card/95 px-2 py-1.5 text-xs text-muted-foreground shadow-float backdrop-blur sm:-left-6"
         >
-          <div aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted-foreground/40" />
-
-          <div className="relative">
-            <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              ref={searchRef}
-              type="search"
-              aria-label="Search clipboard history"
-              placeholder="Search clipboard history"
-              value={query}
-              onChange={(event) => {
-                stopAutoplay();
-                setQuery(event.target.value);
-              }}
-              className="h-11 pl-9"
-            />
-          </div>
-
-          <Tabs
-            value={tab}
-            onValueChange={(value) => {
-              stopAutoplay();
-              setTab(value as DemoTab);
-              setNotice("");
-            }}
-            className="mt-3 min-w-0"
-          >
-            <div className="flex items-center gap-2">
-              <TabsList aria-label="Filter clipboard items" className="h-auto! w-auto! min-w-0 flex-1 p-1">
-                {TABS.map((value) => (
-                  <TabsTrigger
-                    key={value}
-                    value={value}
-                    aria-label={value === "pinned" ? "Pinned" : undefined}
-                    className="min-h-11 flex-1 px-1 text-xs sm:text-sm data-active:bg-primary data-active:text-primary-foreground dark:data-active:bg-primary dark:data-active:text-primary-foreground"
-                  >
-                    {value === "pinned" ? <Star aria-hidden="true" className="fill-current" /> : TAB_META[value].label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              <Button
-                ref={trashRef}
-                type="button"
-                variant="ghost"
-                size="icon-lg"
-                className="size-11 shrink-0"
-                aria-label={`Clear ${meta.clear}`}
-                disabled={!canClear}
-                onClick={openConfirm}
-              >
-                <Trash2 />
-              </Button>
-            </div>
-          </Tabs>
-
-          {visible.length > 0 ? (
-            <ul
-              role="listbox"
-              aria-label="Clipboard items"
-              className="mt-2 flex h-72 flex-col gap-1 overflow-y-auto"
-            >
-              <AnimatePresence initial={false}>
-                {visible.map((item, index) => {
-                  const isSelected = selected?.id === item.id;
-                  const KindIcon = KIND_ICON[item.kind];
-                  return (
-                    <motion.li
-                      key={item.id}
-                      ref={(node: HTMLLIElement | null) => {
-                        if (node) rowRefs.current.set(item.id, node);
-                        else rowRefs.current.delete(item.id);
-                      }}
-                      layout
-                      role="option"
-                      aria-selected={isSelected}
-                      tabIndex={isSelected ? 0 : -1}
-                      initial={item.id === lastArrived ? { opacity: 0, y: -8 } : false}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      onClick={() => select(item.id)}
-                      onKeyDown={(event) => handleRowKey(event, index, item.id)}
-                      className={cn(
-                        "flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                        isSelected ? "bg-primary/15 ring-1 ring-primary/40" : "hover:bg-muted",
-                      )}
-                    >
-                      <KindIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                      {item.pinned && (
-                        <Badge variant="secondary" className="shrink-0 px-1">
-                          <Star aria-hidden="true" className="fill-current" />
-                          <span className="sr-only">Pinned</span>
-                        </Badge>
-                      )}
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{AGE[item.id]}</span>
-                    </motion.li>
-                  );
-                })}
-              </AnimatePresence>
-            </ul>
-          ) : (
-            <div className="mt-2 flex h-72 items-center justify-center text-sm text-muted-foreground">
-              {query ? "No matches." : "Nothing here yet."}
-            </div>
-          )}
-
-          <p role="status" className="mt-2 min-h-4 text-xs text-muted-foreground">
-            {notice}
-          </p>
-          <p className="mt-1 font-mono text-xs text-muted-foreground">↵ paste  ⇧↵ plain  ⌫ remove</p>
+          {config.shortcut.map((key, index) => (
+            <span key={key} className="inline-flex items-center gap-1">
+              {index > 0 && <span aria-hidden="true">+</span>}
+              <Keycap pressed={pressedKeys > index}>{key}</Keycap>
+            </span>
+          ))}
+          <span className="ml-1 hidden sm:inline">opens Clipsy</span>
         </div>
 
-        <p className="mt-3 text-sm text-muted-foreground">
+        {/* A copied item flying into the history. */}
+        <AnimatePresence>
+          {chip && (
+            <motion.div
+              key={chip.id}
+              aria-hidden="true"
+              initial={{ opacity: 0, x: -28, y: 6, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 24, y: 18, scale: 0.85 }}
+              transition={{ type: "spring", stiffness: 320, damping: 24 }}
+              className="absolute top-[13rem] right-3 z-20 flex max-w-[13rem] items-center gap-1.5 rounded-full border border-border bg-card py-1 pr-3 pl-1.5 text-xs font-medium text-foreground shadow-float sm:-right-20"
+            >
+              <span className="flex size-5 items-center justify-center rounded-full bg-brand-teal-soft text-brand-teal">
+                <Copy className="size-3" />
+              </span>
+              <span className="truncate">{chip.label}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <motion.div
+          initial={startPlaying ? { opacity: 0, y: 14, scale: 0.96 } : false}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ delay: WINDOW_DELAY_S, type: "spring", stiffness: 260, damping: 24 }}
+          className="dark relative"
+        >
+          <div
+            role="region"
+            aria-label="Interactive Clipsy demo"
+            onPointerDownCapture={stopAutoplay}
+            onKeyDownCapture={stopAutoplay}
+            className="w-full min-w-0 max-w-full rounded-2xl border border-border bg-card p-2.5 text-card-foreground shadow-window"
+          >
+            <div className="flex items-center gap-2 px-1 pt-0.5 pb-2">
+              <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" width={16} height={16} className="size-4" />
+              <span className="font-heading text-xs font-semibold tracking-tight">Clipsy</span>
+              <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                {items.length} {items.length === 1 ? "item" : "items"}
+              </span>
+            </div>
+
+            <div className="relative">
+              <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                ref={searchRef}
+                type="search"
+                aria-label="Search clipboard history"
+                placeholder="Search clipboard history"
+                value={query}
+                onChange={(event) => {
+                  stopAutoplay();
+                  setQuery(event.target.value);
+                }}
+                className="h-11 rounded-lg border-border bg-muted/60 pl-9 text-sm"
+              />
+            </div>
+
+            <Tabs
+              value={tab}
+              onValueChange={(value) => {
+                stopAutoplay();
+                setTab(value as DemoTab);
+                setNotice("");
+              }}
+              className="mt-2 min-w-0"
+            >
+              <div className="flex items-center gap-1.5">
+                <TabsList aria-label="Filter clipboard items" className="relative h-auto! w-auto! min-w-0 flex-1 rounded-lg bg-muted/60 p-0.5">
+                  <TabsIndicator className="bg-primary shadow-[0_4px_14px_-4px_var(--primary)]" />
+                  {TABS.map((value) => (
+                    <TabsTrigger
+                      key={value}
+                      value={value}
+                      aria-label={value === "pinned" ? "Pinned" : undefined}
+                      className="z-10 min-h-11 flex-1 px-1 text-xs transition-colors data-active:bg-transparent data-active:text-primary-foreground data-active:shadow-none dark:data-active:border-transparent dark:data-active:bg-transparent dark:data-active:text-primary-foreground"
+                    >
+                      {value === "pinned" ? <Star aria-hidden="true" className="size-3.5 fill-current" /> : TAB_META[value].label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                <Button
+                  ref={trashRef}
+                  type="button"
+                  variant="ghost"
+                  size="icon-lg"
+                  className="size-11 shrink-0 text-muted-foreground hover:text-destructive"
+                  aria-label={`Clear ${meta.clear}`}
+                  disabled={!canClear}
+                  onClick={openConfirm}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            </Tabs>
+
+            {visible.length > 0 ? (
+              <ul
+                role="listbox"
+                aria-label="Clipboard items"
+                className="relative mt-2 flex h-[14.5rem] flex-col gap-0.5 overflow-y-auto pr-0.5 [scrollbar-width:thin]"
+              >
+                <AnimatePresence initial={false} mode="popLayout">
+                  {visible.map((item, index) => {
+                    const isSelected = selected?.id === item.id;
+                    const KindIcon = KIND_ICON[item.kind];
+                    return (
+                      <motion.li
+                        key={item.id}
+                        ref={(node: HTMLLIElement | null) => {
+                          if (node) rowRefs.current.set(item.id, node);
+                          else rowRefs.current.delete(item.id);
+                        }}
+                        layout
+                        role="option"
+                        aria-selected={isSelected}
+                        tabIndex={isSelected ? 0 : -1}
+                        initial={item.id === lastArrived ? { opacity: 0, y: -10, scale: 0.98 } : false}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: 16 }}
+                        transition={{ duration: 0.22 }}
+                        onClick={() => select(item.id)}
+                        onKeyDown={(event) => handleRowKey(event, index, item.id)}
+                        className={cn(
+                          "flex min-h-11 shrink-0 cursor-pointer items-center gap-2.5 rounded-lg px-2 text-[0.8125rem] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                          isSelected ? "bg-primary/16 ring-1 ring-primary/55" : "hover:bg-muted/70",
+                        )}
+                      >
+                        <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-md", KIND_TONE[item.kind])}>
+                          <KindIcon aria-hidden="true" className="size-3.5" />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                        {item.pinned && (
+                          <Badge variant="outline" className="shrink-0 border-transparent px-0.5 text-brand-yellow">
+                            <Star aria-hidden="true" className="fill-current" />
+                            <span className="sr-only">Pinned</span>
+                          </Badge>
+                        )}
+                        <span className="w-7 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{AGE[item.id]}</span>
+                      </motion.li>
+                    );
+                  })}
+                </AnimatePresence>
+              </ul>
+            ) : (
+              <div className="mt-2 flex h-[14.5rem] items-center justify-center text-sm text-muted-foreground">
+                {query ? "No matches." : "Nothing here yet."}
+              </div>
+            )}
+
+            <div className="mt-1.5 flex min-h-5 items-center border-t border-border px-1 pt-1.5 text-xs text-muted-foreground">
+              <p role="status" className={cn(notice ? "" : "sr-only")}>
+                {notice}
+              </p>
+              {!notice && (
+                <p aria-hidden="true" className="font-mono text-[0.6875rem] tracking-tight">
+                  ↵ paste  ⇧↵ plain  ⌫ remove
+                </p>
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        <p className="mx-auto mt-4 max-w-[32ch] text-center text-xs text-balance text-muted-foreground">
           This is a working demo. Try the search, the tabs and the trash button.
         </p>
 

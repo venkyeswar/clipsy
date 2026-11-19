@@ -76,6 +76,9 @@ pub struct WindowsBackend {
     terminal_apps: Mutex<Vec<String>>,
     /// Set by `start`; `None` until then.
     hotkeys: Option<HotkeyThread>,
+    /// The accelerator the TogglePopup hotkey is bound to right now. May differ from the config
+    /// when the fallback was used. `None` when no toggle hotkey is bound.
+    toggle_bound: Mutex<Option<String>>,
 }
 
 impl Default for WindowsBackend {
@@ -90,7 +93,13 @@ impl WindowsBackend {
             active: AtomicIsize::new(0),
             terminal_apps: Mutex::new(Vec::new()),
             hotkeys: None,
+            toggle_bound: Mutex::new(None),
         }
+    }
+
+    /// The accelerator the popup shortcut is bound to now, or `None` if it is not bound.
+    pub fn bound_toggle(&self) -> Option<String> {
+        self.toggle_bound.lock().unwrap_or_else(PoisonError::into_inner).clone()
     }
 
     /// Re-register the TogglePopup hotkey. The previous binding stays in place if `accel` fails.
@@ -117,7 +126,13 @@ impl WindowsBackend {
             bail!("the hotkey thread has stopped, so shortcuts cannot be used");
         }
         match answer.recv_timeout(HOTKEY_REPLY_TIMEOUT) {
-            Ok(true) => Ok(()),
+            Ok(true) => {
+                if action == HotkeyAction::TogglePopup {
+                    *self.toggle_bound.lock().unwrap_or_else(PoisonError::into_inner) =
+                        Some(accel.to_string());
+                }
+                Ok(())
+            }
             Ok(false) => Err(taken()),
             // Timed out or the thread dropped the reply: not a conflict, the thread is unresponsive.
             Err(_) => bail!("the hotkey thread did not answer, so shortcut {accel} was not changed"),

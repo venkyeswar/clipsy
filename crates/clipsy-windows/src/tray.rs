@@ -133,7 +133,12 @@ impl Tray {
     pub fn notify(&self, title: &str, body: &str) {
         let text = format!("{title}: {body}");
         tracing::info!("tray notification: {text}");
-        if let Err(e) = self.icon.set_tooltip(Some(text)) {
+        self.set_tooltip(&text);
+    }
+
+    /// Replaces the tray tooltip text.
+    pub fn set_tooltip(&self, text: &str) {
+        if let Err(e) = self.icon.set_tooltip(Some(text.to_string())) {
             tracing::warn!("could not set the tray tooltip: {e}");
         }
     }

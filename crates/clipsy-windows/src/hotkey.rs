@@ -1,5 +1,22 @@
 //! Global hotkey handling: parses GTK-style accelerators such as "<Ctrl><Shift>v".
 
+/// Default popup shortcut on Windows: Win+Shift+V.
+pub const WINDOWS_DEFAULT: &str = "<Super><Shift>v";
+/// Used when [`WINDOWS_DEFAULT`] cannot be registered (Windows already owns Win+Shift+V).
+pub const FALLBACK: &str = "<Ctrl><Shift>v";
+/// The default that older builds wrote to config.toml on Windows.
+const LEGACY_DEFAULT: &str = "<Ctrl><Shift>v";
+
+/// Moves the exact legacy default to [`WINDOWS_DEFAULT`]. Any other value, including a custom
+/// shortcut, is returned unchanged.
+pub fn migrate_toggle_default(current: &str) -> String {
+    if current == LEGACY_DEFAULT {
+        WINDOWS_DEFAULT.to_string()
+    } else {
+        current.to_string()
+    }
+}
+
 /// A parsed hotkey: modifier flags plus a Windows virtual-key code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Accel {
@@ -222,6 +239,26 @@ mod tests {
         assert_eq!(shortcut_label(""), None);
         assert_eq!(shortcut_label("<Hyper>v"), None);
         assert_eq!(shortcut_label("<Ctrl>Pause"), None);
+    }
+
+    #[test]
+    fn migrate_legacy_default_to_super_shift_v() {
+        assert_eq!(migrate_toggle_default("<Ctrl><Shift>v"), "<Super><Shift>v");
+    }
+
+    #[test]
+    fn migrate_keeps_custom_shortcut() {
+        assert_eq!(migrate_toggle_default("<Ctrl><Alt>k"), "<Ctrl><Alt>k");
+        assert_eq!(migrate_toggle_default("<Super><Shift>v"), "<Super><Shift>v");
+    }
+
+    #[test]
+    fn super_shift_v_parses() {
+        let a = parse_accel("<Super><Shift>v").unwrap();
+        assert!(a.win);
+        assert!(a.shift);
+        assert!(!a.ctrl);
+        assert_eq!(a.vk, 0x56);
     }
 
     #[test]

@@ -19,7 +19,7 @@ use slint::{Timer, TimerMode};
 
 use crate::autostart;
 use crate::backend::WindowsBackend;
-use crate::hotkey::{shortcut_label, tray_tooltip};
+use crate::hotkey::{migrate_toggle_default, shortcut_label, tray_tooltip, FALLBACK, WINDOWS_DEFAULT};
 use crate::popup::Popup;
 use crate::settings::SettingsWindow;
 use crate::single_instance::{self, Role, Verb};
@@ -112,6 +112,17 @@ pub fn run(args: Vec<String>) -> Result<()> {
             tracing::warn!("could not write the first-run config: {e:#}");
         }
     }
+    {
+        // Older Windows builds defaulted to Ctrl+Shift+V. Only that exact value moves to Win+Shift+V.
+        let mut cfg = config.borrow_mut();
+        let migrated = migrate_toggle_default(&cfg.shortcuts.toggle_popup);
+        if migrated != cfg.shortcuts.toggle_popup {
+            cfg.shortcuts.toggle_popup = migrated;
+            if let Err(e) = cfg.save() {
+                tracing::warn!("could not save the migrated shortcut: {e:#}");
+            }
+        }
+    }
     let hotkey_name = config.borrow().shortcuts.toggle_popup.clone();
     // The readable form ("Ctrl+Shift+V") when the shortcut is valid, else the raw text.
     let hotkey_label = shortcut_label(&hotkey_name).unwrap_or_else(|| hotkey_name.clone());
@@ -146,10 +157,27 @@ pub fn run(args: Vec<String>) -> Result<()> {
         if accel.is_empty() {
             continue;
         }
-        if let Err(e) = backend.register_hotkey(action, &accel) {
-            tracing::warn!("shortcut {accel} for {action:?} is not available: {e:#}");
-            shortcut_problems.push(format!("Shortcut {accel} is not available. Choose another one in Settings."));
+        let Err(e) = backend.register_hotkey(action, &accel) else {
+            continue;
+        };
+        if action == HotkeyAction::TogglePopup && accel == WINDOWS_DEFAULT {
+            // Windows owns Win+Shift+V on some setups. Use the fallback, keep the config value.
+            match backend.register_hotkey(action, FALLBACK) {
+                Ok(()) => {
+                    tracing::warn!("{WINDOWS_DEFAULT} is taken ({e:#}), using {FALLBACK} instead");
+                    shortcut_problems.push(
+                        "Win+Shift+V is used by Windows, so Clipsy uses Ctrl+Shift+V. Change it in Settings."
+                            .to_string(),
+                    );
+                    continue;
+                }
+                Err(fallback_error) => {
+                    tracing::warn!("fallback shortcut {FALLBACK} is not available either: {fallback_error:#}");
+                }
+            }
         }
+        tracing::warn!("shortcut {accel} for {action:?} is not available: {e:#}");
+        shortcut_problems.push(format!("Shortcut {accel} is not available. Choose another one in Settings."));
     }
     backend.set_terminal_apps(&config.borrow().general.terminal_apps);
     let backend = Rc::new(backend);
@@ -162,7 +190,7 @@ pub fn run(args: Vec<String>) -> Result<()> {
         move |verb| {
             let _ = tray_verbs.send(verb);
         },
-        &tray_tooltip(Some(&hotkey_name)),
+        &tray_tooltip(backend.bound_toggle().as_deref()),
     )?);
     tray.set_paused(config.borrow().privacy.paused);
     if first_run {
@@ -359,9 +387,12 @@ impl App {
             let tray = self.tray.clone();
             // The window has already written the config and applied the terminal list and the
             // shortcut. Here the tray and the popup pick up the new values.
+            let backend = self.backend.clone();
             let on_saved = move || {
                 let paused = config.borrow().privacy.paused;
                 tray.set_paused(paused);
+                // Show the shortcut that is bound now, which may be the fallback.
+                tray.set_tooltip(&tray_tooltip(backend.bound_toggle().as_deref()));
                 popup.refresh();
             };
             match SettingsWindow::new(self.config.clone(), self.backend.clone(), on_saved) {

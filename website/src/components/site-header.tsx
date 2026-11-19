@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Menu, Monitor, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,9 @@ const sectionLinks = [
   { href: "#downloads", label: "Downloads" },
   { href: "#help", label: "Help" },
 ];
+
+/** Every page section, in page order. The observer tracks all of them. */
+const trackedSectionIds = ["install", "downloads", "features", "shortcuts", "help"];
 
 const githubUrl = `https://github.com/${config.repo}`;
 
@@ -64,7 +68,43 @@ function ThemeToggle() {
   );
 }
 
+/**
+ * Returns the id of the section currently in view, or "" before any section is visible.
+ * Falls back to "" when IntersectionObserver is missing (e.g. old browsers, jsdom).
+ */
+function useActiveSection(ids: string[]): string {
+  const [active, setActive] = useState("");
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+
+    const visible = new Set<string>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) visible.add(entry.target.id);
+          else visible.delete(entry.target.id);
+        }
+        // Pick the first visible section in page order, so the highlight is stable.
+        const first = ids.find((id) => visible.has(id));
+        if (first) setActive(first);
+      },
+      { rootMargin: "-40% 0px -55% 0px" },
+    );
+
+    for (const id of ids) {
+      const element = document.getElementById(id);
+      if (element) observer.observe(element);
+    }
+    return () => observer.disconnect();
+  }, [ids]);
+
+  return active;
+}
+
 export function SiteHeader() {
+  const active = useActiveSection(trackedSectionIds);
+
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-2 px-4">
@@ -84,7 +124,13 @@ export function SiteHeader() {
 
         <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
           {sectionLinks.map((link) => (
-            <Button key={link.href} variant="ghost" className="h-11" render={<a href={link.href} />}>
+            <Button
+              key={link.href}
+              variant="ghost"
+              className="h-11"
+              render={<a href={link.href} />}
+              aria-current={active === link.href.slice(1) ? "location" : undefined}
+            >
               {link.label}
             </Button>
           ))}
@@ -128,6 +174,7 @@ export function SiteHeader() {
                         variant="ghost"
                         className="h-11 justify-start text-base"
                         render={<a href={link.href} />}
+                        aria-current={active === link.href.slice(1) ? "location" : undefined}
                       />
                     }
                   >

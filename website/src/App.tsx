@@ -1,15 +1,12 @@
 import { DownloadsSection } from "@/components/downloads-section";
+import { FeaturesSection } from "@/components/features-section";
+import { HelpSection } from "@/components/help-section";
 import { Hero } from "@/components/hero";
 import { InstallSection } from "@/components/install-section";
+import { ShortcutsSection } from "@/components/shortcuts-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Toaster } from "@/components/ui/sonner";
-
-const sections = [
-  { id: "features", title: "Features" },
-  { id: "shortcuts", title: "Shortcuts" },
-  { id: "help", title: "Help" },
-];
 
 export default function App() {
   return (
@@ -23,17 +20,19 @@ export default function App() {
       <SiteHeader />
       <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4">
         <Hero />
-        <section id="install" className="py-12" style={{ scrollMarginTop: "4rem" }}>
+        <section id="install" className="py-12">
           <InstallSection />
         </section>
         <DownloadsSection />
-        {sections.map((section) => (
-          <section key={section.id} id={section.id} className="py-12">
-            <h2 className="font-heading text-2xl font-semibold tracking-tight">
-              {section.title}
-            </h2>
-          </section>
-        ))}
+        <section id="features" className="py-12">
+          <FeaturesSection />
+        </section>
+        <section id="shortcuts" className="py-12">
+          <ShortcutsSection />
+        </section>
+        <section id="help" className="py-12">
+          <HelpSection />
+        </section>
       </main>
       <SiteFooter />
       <Toaster />

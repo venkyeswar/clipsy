@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +20,8 @@ import { CommandLine } from "@/components/command-line";
 import { config } from "@/config";
 import { useReleases } from "@/hooks/use-releases";
 import { formatBytes } from "@/lib/format";
-import { CHECKSUM_VERIFY_COMMAND } from "@/lib/install-commands";
+import { useSelectedPlatform, type SelectedPlatform } from "@/lib/platform-context";
+import { CHECKSUM_VERIFY_COMMAND, windowsVerifyCommands } from "@/lib/install-commands";
 import { latestStable, type Release, type ReleaseAsset } from "@/lib/releases";
 
 const RELEASES_URL = `https://github.com/${config.repo}/releases`;
@@ -60,9 +61,41 @@ function AssetButton({
   );
 }
 
-function ReleaseBlock({ release, isLatest }: { release: Release; isLatest: boolean }) {
-  const { version, deb, checksums } = release;
+/** One platform's files in the release card. Missing files show the coming-soon state. */
+function PlatformFiles({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <h4 className="text-sm font-medium text-foreground">{title}</h4>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{children}</div>
+    </div>
+  );
+}
+
+function ComingSoon({ what }: { what: string }) {
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+      <Badge variant="secondary" className="bg-brand-yellow-soft text-brand-yellow">
+        Coming soon
+      </Badge>
+      <span>{what}</span>
+    </p>
+  );
+}
+
+function ReleaseBlock({
+  release,
+  isLatest,
+  platform,
+}: {
+  release: Release;
+  isLatest: boolean;
+  platform: SelectedPlatform;
+}) {
+  const { version, deb, windowsInstaller, windowsPortable } = release;
+  const sums = release.sha256sums ?? release.checksums;
   const date = formatDate(release.date);
+  const windowsCommands = windowsVerifyCommands(release);
+  const hasWindows = Boolean(windowsInstaller || windowsPortable);
 
   return (
     <div
@@ -85,26 +118,61 @@ function ReleaseBlock({ release, isLatest }: { release: Release; isLatest: boole
         )}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-        {deb && (
+      <PlatformFiles title="Linux">
+        {deb ? (
           <AssetButton asset={deb} label={`Download .deb for ${version}`} text="Download .deb" />
+        ) : (
+          <p className="text-sm text-muted-foreground">No .deb package for this version.</p>
         )}
-        {checksums && (
+      </PlatformFiles>
+
+      <PlatformFiles title="Windows">
+        {windowsInstaller && (
           <AssetButton
-            asset={checksums}
+            asset={windowsInstaller}
+            label={`Download Windows installer for ${version}`}
+            text="Installer (.exe)"
+          />
+        )}
+        {windowsPortable && (
+          <AssetButton
+            asset={windowsPortable}
+            variant="outline"
+            label={`Download Windows portable zip for ${version}`}
+            text="Portable (.zip)"
+          />
+        )}
+        {!hasWindows && <ComingSoon what="The Windows download for this version is coming soon." />}
+      </PlatformFiles>
+
+      {sums && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <AssetButton
+            asset={sums}
             variant="secondary"
             label={`Download SHA256SUMS for ${version}`}
             text="SHA256SUMS"
           />
-        )}
-      </div>
-
-      {checksums && (
-        <div className="mt-3">
-          <p className="mb-1.5 text-sm text-muted-foreground">Check your download with:</p>
-          <CommandLine text={CHECKSUM_VERIFY_COMMAND} label="Copy checksum command" />
         </div>
       )}
+
+      {platform === "windows"
+        ? windowsCommands.length > 0 && (
+            <div className="mt-3">
+              <p className="mb-1.5 text-sm text-muted-foreground">Check your download in PowerShell:</p>
+              <div className="flex flex-col gap-1.5">
+                {windowsCommands.map((command) => (
+                  <CommandLine key={command} text={command} label="Copy PowerShell command" wrap />
+                ))}
+              </div>
+            </div>
+          )
+        : sums && (
+            <div className="mt-3">
+              <p className="mb-1.5 text-sm text-muted-foreground">Check your download with:</p>
+              <CommandLine text={CHECKSUM_VERIFY_COMMAND} label="Copy checksum command" />
+            </div>
+          )}
 
       <p className="mt-3 text-sm text-muted-foreground">
         Changes and details for this release are in the{" "}
@@ -140,8 +208,17 @@ function AssetLink({ asset, label, text }: { asset?: ReleaseAsset; label: string
   return <TableLink href={asset.url} label={label} text={text} />;
 }
 
+/** A short list of what a version ships, for the mobile version picker. */
+function shipsSummary(release: Release): string {
+  const linux = release.deb ? ".deb" : null;
+  const windows = release.windowsInstaller || release.windowsPortable ? "Windows" : null;
+  const parts = [linux, windows].filter(Boolean);
+  return parts.length > 0 ? parts.join(", ") : "no installers yet";
+}
+
 export function DownloadsSection() {
   const { releases, status } = useReleases();
+  const { platform } = useSelectedPlatform();
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   const header = (
@@ -198,7 +275,7 @@ export function DownloadsSection() {
 
       <div aria-live="polite" className="mt-4">
         {shown ? (
-          <ReleaseBlock release={shown} isLatest={shown.tag === latest?.tag} />
+          <ReleaseBlock release={shown} isLatest={shown.tag === latest?.tag} platform={platform} />
         ) : (
           <p className="rounded-xl border border-border bg-card p-4 text-muted-foreground sm:p-5">
             No stable release yet.
@@ -219,9 +296,16 @@ export function DownloadsSection() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {releases.map((release) => (
-                  <DropdownMenuItem key={release.tag} onClick={() => setSelectedTag(release.tag)}>
-                    Clipsy {release.version}
-                    {release.prerelease ? " (pre-release)" : ""}
+                  <DropdownMenuItem
+                    key={release.tag}
+                    onClick={() => setSelectedTag(release.tag)}
+                    className="flex flex-col items-start gap-0.5"
+                  >
+                    <span>
+                      Clipsy {release.version}
+                      {release.prerelease ? " (pre-release)" : ""}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{shipsSummary(release)}</span>
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
@@ -236,6 +320,7 @@ export function DownloadsSection() {
                 <TableHead scope="col">Version</TableHead>
                 <TableHead scope="col">Date</TableHead>
                 <TableHead scope="col">.deb</TableHead>
+                <TableHead scope="col">Windows</TableHead>
                 <TableHead scope="col">Notes</TableHead>
               </TableRow>
             </TableHeader>
@@ -255,6 +340,20 @@ export function DownloadsSection() {
                       label={`Download .deb for ${release.version}`}
                       text=".deb"
                     />
+                  </TableCell>
+                  <TableCell>
+                    {release.windowsInstaller ? (
+                      <TableLink
+                        href={release.windowsInstaller.url}
+                        label={`Download Windows installer for ${release.version}`}
+                        text=".exe"
+                      />
+                    ) : (
+                      <span className="text-muted-foreground">
+                        <span aria-hidden="true">—</span>
+                        <span className="sr-only">No Windows download</span>
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <TableLink

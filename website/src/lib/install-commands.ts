@@ -76,18 +76,22 @@ function openStep(where: string): InstallStep {
  * Beginner steps for Windows. Without release data the file-name commands stay empty
  * and the steps are marked needsRelease, like the .deb steps.
  */
+/** PowerShell lines that compare the installer's hash with its SHA256SUMS line. Empty until both exist. */
+export function windowsVerifyCommands(release?: Release): string[] {
+  const installer = release?.windowsInstaller?.name;
+  const sums = release?.sha256sums ?? release?.checksums;
+  if (!installer || !sums) return [];
+  return [
+    `Get-FileHash .\\${installer} -Algorithm SHA256`,
+    `(Get-Content .\\SHA256SUMS | Select-String "${installer}").Line`,
+  ];
+}
+
 export function windowsInstallSteps(release?: Release): InstallStep[] {
   const installer = release?.windowsInstaller?.name;
   const portable = release?.windowsPortable?.name;
-  const sums = release?.sha256sums ?? release?.checksums;
   const version = release ? `Clipsy ${release.version}` : "Clipsy";
-  const verifyCommands =
-    installer && sums
-      ? [
-          `Get-FileHash .\\${installer} -Algorithm SHA256`,
-          `(Get-Content .\\SHA256SUMS | Select-String "${installer}").Line`,
-        ]
-      : [];
+  const verifyCommands = windowsVerifyCommands(release);
 
   return [
     {

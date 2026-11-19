@@ -26,3 +26,21 @@ it("no_sudo_answer_has_copyable_uninstall_command", async () => {
   expect(await screen.findByText("./uninstall.sh")).toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: "Copy command" }).length).toBeGreaterThan(0);
 });
+
+it("data_and_uninstall_answers_distinguish_snap_installs", async () => {
+  render(<HelpSection />);
+  await userEvent.click(screen.getByRole("button", { name: "Where is my data stored?" }));
+  expect(await screen.findByText("~/snap/clipsy/")).toBeInTheDocument();
+  expect(screen.getByText("rm -r ~/.local/share/clipsy")).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", { name: "How do I uninstall?" }));
+  expect(await screen.findByText(/Snap saves an automatic snapshot/)).toBeInTheDocument();
+  expect(screen.getByText(/asks whether to keep or delete your history/)).toBeInTheDocument();
+});
+
+it("wayland_answer_mentions_logging_out_once", async () => {
+  render(<HelpSection />);
+  await userEvent.click(screen.getByRole("button", { name: "Does it work on Wayland?" }));
+  expect(await screen.findByText(/Log out and back in once/)).toBeInTheDocument();
+  expect(screen.getByText("Other Wayland desktops are not supported yet.")).toBeInTheDocument();
+});

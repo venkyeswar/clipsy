@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CopyButton } from "@/components/copy-button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Keycap } from "@/components/keycap";
+import { CommandLine } from "@/components/command-line";
+import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { config } from "@/config";
 import { useReleases } from "@/hooks/use-releases";
 import { latestStable } from "@/lib/releases";
@@ -17,16 +18,24 @@ export function InstallSection() {
   const tabs = installCommands(config.snap.channel, release);
 
   return (
-    <div>
-      <h2 className="font-heading text-2xl font-semibold tracking-tight">Install Clipsy</h2>
-      <p className="mt-2 max-w-[60ch] text-muted-foreground">
+    <div className="flex h-full flex-col">
+      <h2 className="font-heading text-xl font-semibold tracking-[-0.02em] sm:text-2xl">Install Clipsy</h2>
+      <p className="mt-1 max-w-[60ch] text-muted-foreground">
         Pick the way that suits you. Every option installs the same app.
       </p>
 
-      <Tabs defaultValue={tabs[0].id} className="mt-6 gap-0">
-        <TabsList className="!h-auto max-w-full flex-wrap justify-start gap-1 p-1">
+      <Tabs defaultValue={tabs[0].id} className="mt-4 gap-0">
+        <TabsList
+          variant="line"
+          className="relative h-auto! w-full max-w-full justify-start gap-0 overflow-x-auto rounded-none border-b border-border p-0 [scrollbar-width:none]"
+        >
+          <TabsIndicator className="top-auto! bottom-[-1px] h-0.5! rounded-full bg-primary" />
           {tabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id} className="min-h-11 px-3">
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className="min-h-11 flex-none px-3 text-[0.875rem] after:hidden data-active:text-foreground"
+            >
               {tab.title}
             </TabsTrigger>
           ))}
@@ -39,32 +48,24 @@ export function InstallSection() {
           const noTarball = tab.id === "nosudo" && !release?.tarball;
 
           return (
-            <TabsContent key={tab.id} value={tab.id} className="mt-4 flex flex-col gap-4">
+            <TabsContent
+              key={tab.id}
+              value={tab.id}
+              className="flex flex-col gap-2 pt-4 text-[0.9375rem] data-[hidden]:hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200"
+            >
               {waiting ? (
                 <Skeleton aria-hidden="true" className="h-11 w-full" />
               ) : (
-                <p className="max-w-[60ch] text-muted-foreground">{tab.note}</p>
+                <p className="mb-1 max-w-[62ch] text-muted-foreground">{tab.note}</p>
               )}
 
               {!waiting &&
                 tab.commands.map((command) => (
-                  <div
-                    key={`${tab.id}-${command}`}
-                    className="flex items-center gap-2 rounded-lg border border-border bg-muted p-2 pl-3"
-                  >
-                    <pre
-                      data-copy-source
-                      tabIndex={0}
-                      className="min-w-0 flex-1 overflow-x-auto rounded-sm font-mono text-sm whitespace-pre text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                    >
-                      <code>{command}</code>
-                    </pre>
-                    <CopyButton text={command} />
-                  </div>
+                  <CommandLine key={`${tab.id}-${command}`} text={command} />
                 ))}
 
               {tab.id === "snap" && (
-                <div>
+                <div className="mt-1">
                   <Button
                     variant="outline"
                     className="h-11 px-4"
@@ -76,7 +77,7 @@ export function InstallSection() {
               )}
 
               {!waiting && (noDeb || noTarball) && (
-                <div>
+                <div className="mt-1">
                   <Button
                     variant="outline"
                     className="h-11 px-4"
@@ -90,6 +91,19 @@ export function InstallSection() {
           );
         })}
       </Tabs>
+
+      <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-5 text-sm text-muted-foreground">
+        <span>After installing, press</span>
+        <span className="inline-flex items-center gap-1">
+          {config.shortcut.map((key, index) => (
+            <span key={key} className="inline-flex items-center gap-1">
+              {index > 0 && <span aria-hidden="true">+</span>}
+              <Keycap>{key}</Keycap>
+            </span>
+          ))}
+        </span>
+        <span>to open Clipsy.</span>
+      </div>
     </div>
   );
 }

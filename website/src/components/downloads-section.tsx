@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CopyButton } from "@/components/copy-button";
+import { CommandLine } from "@/components/command-line";
 import { config } from "@/config";
 import { useReleases } from "@/hooks/use-releases";
 import { formatBytes } from "@/lib/format";
@@ -24,6 +24,7 @@ import { latestStable, type Release, type ReleaseAsset } from "@/lib/releases";
 
 const CHECKSUM_COMMAND = "sha256sum -c SHA256SUMS";
 const RELEASES_URL = `https://github.com/${config.repo}/releases`;
+const SECTION_CLASS = "flex h-full flex-col";
 const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
 
 function formatDate(iso: string): string {
@@ -44,16 +45,16 @@ function AssetButton({
   variant?: "default" | "outline" | "secondary";
 }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
       <Button
         variant={variant}
-        className="h-11 px-4"
+        className={variant === "default" ? "h-11 px-4 hover:bg-primary-hover" : "h-11 px-4"}
         render={<a href={asset.url} rel="noopener" aria-label={label} />}
       >
         {text}
       </Button>
       {asset.size > 0 && (
-        <span className="text-sm text-muted-foreground">{formatBytes(asset.size)}</span>
+        <span className="text-xs tabular-nums text-muted-foreground">{formatBytes(asset.size)}</span>
       )}
     </div>
   );
@@ -66,20 +67,25 @@ function ReleaseBlock({ release, isLatest }: { release: Release; isLatest: boole
   return (
     <div
       data-release-block
-      className="rounded-xl border border-border bg-card p-5 text-card-foreground sm:p-6"
+      className="relative overflow-hidden rounded-xl border border-border bg-card p-4 text-card-foreground sm:p-5"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="font-heading text-xl font-semibold tracking-tight">Clipsy {version}</h3>
-        {isLatest && <Badge variant="secondary">Latest</Badge>}
+      <div aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-secondary-accent" />
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <h3 className="font-heading text-lg font-semibold tracking-[-0.02em]">Clipsy {version}</h3>
+        {isLatest && (
+          <Badge variant="secondary" className="bg-brand-teal-soft text-brand-teal">
+            Latest
+          </Badge>
+        )}
         {release.prerelease && <Badge variant="outline">Pre-release</Badge>}
+        {date && (
+          <span className="text-sm text-muted-foreground sm:ml-auto">
+            <time dateTime={release.date}>{date}</time>
+          </span>
+        )}
       </div>
-      {date && (
-        <p className="mt-1 text-sm text-muted-foreground">
-          <time dateTime={release.date}>{date}</time>
-        </p>
-      )}
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         {deb && (
           <AssetButton asset={deb} label={`Download .deb for ${version}`} text="Download .deb" />
         )}
@@ -102,24 +108,19 @@ function ReleaseBlock({ release, isLatest }: { release: Release; isLatest: boole
       </div>
 
       {checksums && (
-        <div className="mt-5 flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-          <span>Check your download with:</span>
-          <span className="flex items-center gap-1 rounded-md bg-muted py-1 pr-1 pl-2">
-            <code data-copy-source className="font-mono text-foreground">
-              {CHECKSUM_COMMAND}
-            </code>
-            <CopyButton text={CHECKSUM_COMMAND} label="Copy checksum command" />
-          </span>
+        <div className="mt-3">
+          <p className="mb-1.5 text-sm text-muted-foreground">Check your download with:</p>
+          <CommandLine text={CHECKSUM_COMMAND} label="Copy checksum command" />
         </div>
       )}
 
-      <p className="mt-4 text-sm text-muted-foreground">
+      <p className="mt-3 text-sm text-muted-foreground">
         Changes and details for this release are in the{" "}
         <a
           href={release.notesUrl}
           target="_blank"
           rel="noopener"
-          className="font-medium text-foreground underline underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="font-medium text-secondary-accent underline underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           release notes on GitHub
         </a>
@@ -153,8 +154,8 @@ export function DownloadsSection() {
 
   const header = (
     <>
-      <h2 className="font-heading text-2xl font-semibold tracking-tight">Downloads</h2>
-      <p className="mt-2 max-w-[60ch] text-muted-foreground">
+      <h2 className="font-heading text-xl font-semibold tracking-[-0.02em] sm:text-2xl">Downloads</h2>
+      <p className="mt-1 max-w-[60ch] text-muted-foreground">
         The latest version is on top. Older versions stay available.
       </p>
     </>
@@ -162,11 +163,11 @@ export function DownloadsSection() {
 
   if (status === "loading") {
     return (
-      <section id="downloads" className="py-12" aria-busy="true">
+      <section id="downloads" className={SECTION_CLASS} aria-busy="true">
         {header}
-        <div className="mt-6 flex flex-col gap-10">
-          <Skeleton aria-hidden="true" className="h-56 w-full" />
-          <Skeleton aria-hidden="true" className="h-64 w-full" />
+        <div className="mt-4 flex flex-col gap-4">
+          <Skeleton aria-hidden="true" className="h-44 w-full" />
+          <Skeleton aria-hidden="true" className="h-24 w-full" />
         </div>
       </section>
     );
@@ -174,9 +175,9 @@ export function DownloadsSection() {
 
   if (status === "empty" || releases.length === 0) {
     return (
-      <section id="downloads" className="py-12">
+      <section id="downloads" className={SECTION_CLASS}>
         {header}
-        <div className="mt-6">
+        <div className="mt-4">
           <p className="text-muted-foreground">No releases are published yet.</p>
           <Button
             variant="outline"
@@ -195,10 +196,10 @@ export function DownloadsSection() {
   const previous = releases.filter((release) => release.tag !== latest?.tag);
 
   return (
-    <section id="downloads" className="py-12">
+    <section id="downloads" className={SECTION_CLASS}>
       {header}
 
-      <div aria-live="polite" className="mt-4 min-h-0 text-sm text-muted-foreground">
+      <div aria-live="polite" className="mt-2 min-h-0 text-sm text-muted-foreground empty:hidden">
         {status === "snapshot" &&
           "Showing the last saved release list because GitHub could not be reached."}
       </div>
@@ -207,15 +208,15 @@ export function DownloadsSection() {
         {shown ? (
           <ReleaseBlock release={shown} isLatest={shown.tag === latest?.tag} />
         ) : (
-          <p className="rounded-xl border border-border bg-card p-5 text-muted-foreground sm:p-6">
+          <p className="rounded-xl border border-border bg-card p-4 text-muted-foreground sm:p-5">
             No stable release yet.
           </p>
         )}
       </div>
 
-      <div className="mt-10">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 md:mb-4">
-          <h3 id="previous-versions-heading" className="font-heading text-lg font-semibold tracking-tight">
+      <div className="mt-5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+          <h3 id="previous-versions-heading" className="font-heading text-base font-semibold tracking-[-0.01em]">
             Previous versions
           </h3>
           <div className="md:hidden">
@@ -283,7 +284,7 @@ export function DownloadsSection() {
             </TableBody>
           </Table>
         ) : (
-          <p className="text-muted-foreground">No other releases yet.</p>
+          <p className="text-sm text-muted-foreground">No other releases yet.</p>
         )}
       </div>
     </section>

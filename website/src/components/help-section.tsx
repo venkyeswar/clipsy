@@ -1,4 +1,5 @@
-import { CopyButton } from "@/components/copy-button";
+import type { ReactNode } from "react";
+import { CommandLine } from "@/components/command-line";
 import {
   Accordion,
   AccordionContent,
@@ -8,132 +9,128 @@ import {
 import { config } from "@/config";
 import { NOSUDO_UNINSTALL_COMMAND, releasesUrl } from "@/lib/install-commands";
 
-/** A single copyable command, styled like the install section. */
-function Command({ text }: { text: string }) {
+const shortcutText = config.shortcut.join("+");
+
+function Question({ value, title, children }: { value: string; title: string; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted p-2 pl-3">
-      <pre
-        data-copy-source
-        tabIndex={0}
-        className="min-w-0 flex-1 overflow-x-auto rounded-sm font-mono text-sm whitespace-pre text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-      >
-        <code>{text}</code>
-      </pre>
-      <CopyButton text={text} />
+    <AccordionItem value={value} className="border-border px-4">
+      <AccordionTrigger className="min-h-12 items-center py-3 text-[0.9375rem] font-medium hover:no-underline hover:text-secondary-accent">
+        {title}
+      </AccordionTrigger>
+      <AccordionContent className="pb-4 text-[0.9375rem] text-muted-foreground [&_p:not(:last-child)]:mb-2 [&_a]:text-secondary-accent [&_code]:font-mono [&_code]:text-[0.8125rem] [&_code]:text-foreground">
+        {children}
+      </AccordionContent>
+    </AccordionItem>
+  );
+}
+
+/** A label above a command, used where an answer differs by install type. */
+function Labelled({ label, command, after }: { label: string; command: string; after?: string }) {
+  return (
+    <div className="mt-3 first:mt-0">
+      <p className="mb-1 text-sm font-medium text-foreground">{label}</p>
+      <CommandLine text={command} />
+      {after && <p className="mt-1 text-sm">{after}</p>}
     </div>
   );
 }
 
-const shortcutText = config.shortcut.join("+");
-
 export function HelpSection() {
   return (
     <div>
-      <h2 className="font-heading text-2xl font-semibold tracking-tight">Help</h2>
+      <h2 className="font-heading text-xl font-semibold tracking-[-0.02em] sm:text-2xl">Help</h2>
+      <p className="mt-1 max-w-[60ch] text-muted-foreground">Answers to the questions people ask most.</p>
 
-      <Accordion className="mt-6">
-        <AccordionItem value="super-v">
-          <AccordionTrigger className="min-h-11 items-center py-3 text-base">
-            Super+V does nothing
-          </AccordionTrigger>
-          <AccordionContent>
-            <p>
-              GNOME already uses Super+V to show its notification list. Clipsy&apos;s default
-              shortcut is {shortcutText}. You can change it in Settings or on the welcome screen.
-            </p>
-          </AccordionContent>
-        </AccordionItem>
+      <Accordion className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
+        <Question value="super-v" title="Super+V does nothing">
+          <p>
+            GNOME already uses Super+V to show its notification list. Clipsy&apos;s default
+            shortcut is {shortcutText}. You can change it in Settings or on the welcome screen.
+          </p>
+        </Question>
 
-        <AccordionItem value="wayland">
-          <AccordionTrigger className="min-h-11 items-center py-3 text-base">
-            Does it work on Wayland?
-          </AccordionTrigger>
-          <AccordionContent>
-            <p>
-              Yes, on GNOME with Wayland. Clipsy installs a small GNOME Shell extension that
-              watches the clipboard and handles the shortcut. On first run, Clipsy offers to set
-              it up.
-            </p>
-          </AccordionContent>
-        </AccordionItem>
+        <Question value="wayland" title="Does it work on Wayland?">
+          <p>
+            Yes, on GNOME with Wayland. Clipsy installs and turns on a small GNOME Shell extension
+            by itself where it can. Log out and back in once so the extension starts. If the
+            automatic setup fails, Clipsy shows a Terminal command to run instead.
+          </p>
+          <p>Other Wayland desktops are not supported yet.</p>
+        </Question>
 
-        <AccordionItem value="sudo">
-          <AccordionTrigger className="min-h-11 items-center py-3 text-base">
-            I can&apos;t use sudo
-          </AccordionTrigger>
-          <AccordionContent>
-            <p>
-              The no-sudo install puts Clipsy in your home folder. GTK4 and libadwaita must already
-              be installed, which they are on Ubuntu 24.04 GNOME.
-            </p>
-            <ol className="mb-4 list-decimal space-y-2 pl-5">
-              <li>
-                Download the <code className="font-mono">.tar.gz</code> file from the{" "}
-                <a href={releasesUrl()} target="_blank" rel="noopener">
-                  releases page
-                </a>
-                .
-              </li>
-              <li>
-                Extract it and go into the folder:
-                <div className="mt-2 flex flex-col gap-2">
-                  <Command text="tar -xzf clipsy-*-linux-x86_64.tar.gz" />
-                  <Command text="cd clipsy-*-linux-x86_64" />
-                </div>
-              </li>
-              <li>
-                Run the installer:
-                <div className="mt-2">
-                  <Command text="./install.sh" />
-                </div>
-              </li>
-            </ol>
-            <p>To remove it later, run this from the same folder:</p>
-            <div className="mt-2">
-              <Command text={NOSUDO_UNINSTALL_COMMAND} />
-            </div>
-          </AccordionContent>
-        </AccordionItem>
+        <Question value="sudo" title="I can't use sudo">
+          <p>
+            The no-sudo install puts Clipsy in your home folder. GTK4 and libadwaita must already
+            be installed, which they are on Ubuntu 24.04 GNOME.
+          </p>
+          <ol className="mb-4 list-decimal space-y-2 pl-5">
+            <li>
+              Download the <code>.tar.gz</code> file from the{" "}
+              <a href={releasesUrl()} target="_blank" rel="noopener">
+                releases page
+              </a>
+              .
+            </li>
+            <li>
+              Extract it and go into the folder:
+              <div className="mt-1.5 flex flex-col gap-1.5">
+                <CommandLine text="tar -xzf clipsy-*-linux-x86_64.tar.gz" />
+                <CommandLine text="cd clipsy-*-linux-x86_64" />
+              </div>
+            </li>
+            <li>
+              Run the installer:
+              <div className="mt-1.5">
+                <CommandLine text="./install.sh" />
+              </div>
+            </li>
+          </ol>
+          <p>To remove it later, run this from the same folder:</p>
+          <div className="mt-1.5">
+            <CommandLine text={NOSUDO_UNINSTALL_COMMAND} />
+          </div>
+        </Question>
 
-        <AccordionItem value="uninstall">
-          <AccordionTrigger className="min-h-11 items-center py-3 text-base">
-            How do I uninstall?
-          </AccordionTrigger>
-          <AccordionContent>
-            <p>Run the command that matches how you installed Clipsy.</p>
-            <p className="mt-2 font-medium text-foreground">Snap</p>
-            <div className="mt-1">
-              <Command text="sudo snap remove clipsy" />
-            </div>
-            <p className="mt-3 font-medium text-foreground">.deb package</p>
-            <div className="mt-1">
-              <Command text="sudo apt remove clipsy" />
-            </div>
-            <p className="mt-3 font-medium text-foreground">No sudo install</p>
-            <div className="mt-1">
-              <Command text={NOSUDO_UNINSTALL_COMMAND} />
-            </div>
-            <p className="mt-3">
-              Removing the app keeps your history. To delete it too, see the next question.
-            </p>
-          </AccordionContent>
-        </AccordionItem>
+        <Question value="uninstall" title="How do I uninstall?">
+          <p>Run the command that matches how you installed Clipsy.</p>
+          <Labelled
+            label="Snap"
+            command="sudo snap remove clipsy"
+            after="This also deletes your history. Snap saves an automatic snapshot of it first."
+          />
+          <Labelled
+            label=".deb package"
+            command="sudo apt remove clipsy"
+            after="Your history stays in ~/.local/share/clipsy."
+          />
+          <Labelled
+            label="No sudo install"
+            command={NOSUDO_UNINSTALL_COMMAND}
+            after="It asks whether to keep or delete your history."
+          />
+        </Question>
 
-        <AccordionItem value="data">
-          <AccordionTrigger className="min-h-11 items-center py-3 text-base">
-            Where is my data stored?
-          </AccordionTrigger>
-          <AccordionContent>
-            <p>
-              In <code className="font-mono">~/.local/share/clipsy</code> on your computer. That
-              folder holds the history database and the image files. Nothing is sent anywhere.
-            </p>
-            <p className="mt-2">To delete everything Clipsy has stored, remove that folder:</p>
-            <div className="mt-2">
-              <Command text="rm -r ~/.local/share/clipsy" />
-            </div>
-          </AccordionContent>
-        </AccordionItem>
+        <Question value="data" title="Where is my data stored?">
+          <p>
+            On your computer, and nothing is sent anywhere. The folder holds the history database
+            and the image files. Where it is depends on how you installed Clipsy:
+          </p>
+          <ul className="mb-3 list-disc space-y-1 pl-5">
+            <li>
+              .deb, no-sudo and source installs: <code>~/.local/share/clipsy</code>
+            </li>
+            <li>
+              Snap: inside the snap&apos;s own folder, under <code>~/snap/clipsy/</code>
+            </li>
+          </ul>
+          <p className="mb-1.5!">
+            To delete the history of a .deb, no-sudo or source install, remove that folder:
+          </p>
+          <CommandLine text="rm -r ~/.local/share/clipsy" />
+          <p className="mt-2">
+            For the Snap, <code>sudo snap remove clipsy</code> deletes it.
+          </p>
+        </Question>
       </Accordion>
     </div>
   );

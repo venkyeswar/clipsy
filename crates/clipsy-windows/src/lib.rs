@@ -14,7 +14,6 @@ pub mod autostart;
 pub mod backend;
 #[cfg(windows)]
 pub mod clipboard;
-#[cfg(windows)]
 pub mod paste;
 pub mod single_instance;
 #[cfg(windows)]

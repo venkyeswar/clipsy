@@ -1,0 +1,219 @@
+name: Release
+
+# Builds every release file. Pushing a tag such as v0.4.0 builds the files AND
+# publishes a GitHub Release. Running the workflow by hand (workflow_dispatch)
+# only builds the files and uploads them as workflow artifacts (a dry run).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out the version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo_version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          if [ -z "$cargo_version" ]; then
+            echo "::error::Could not read the version from Cargo.toml"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            case "$GITHUB_REF_NAME" in
+              v[0-9]*) ;;
+              *) echo "::error::Tag '$GITHUB_REF_NAME' must look like v0.4.0"; exit 1 ;;
+            esac
+            version="${GITHUB_REF_NAME#v}"
+            # The .deb name comes from Cargo.toml, so the two must agree.
+            if [ "$version" != "$cargo_version" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match Cargo.toml version $cargo_version. Change the version in Cargo.toml (and commit it) before tagging."
+              exit 1
+            fi
+          else
+            version="$cargo_version"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Release version: $version"
+
+  deb:
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libgtk-4-dev libadwaita-1-dev libx11-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --locked
+
+      - name: Build the .deb
+        run: bash packaging/build-deb.sh
+
+      - name: Copy the .deb to dist
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          # cargo-deb names the file <name>_<version>-<revision>_<arch>.deb.
+          # install.sh looks for exactly this name.
+          deb="target/debian/clipsy_${VERSION}-1_amd64.deb"
+          if [ ! -f "$deb" ]; then
+            echo "::error::Expected $deb but it was not built. Found:"
+            ls -la target/debian || true
+            exit 1
+          fi
+          mkdir -p dist
+          cp "$deb" "dist/clipsy_${VERSION}-1_amd64.deb"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/clipsy_${{ needs.version.outputs.version }}-1_amd64.deb
+          if-no-files-found: error
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (MSVC)
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build clipsy.exe
+        shell: pwsh
+        run: cargo build --release -p clipsy-windows
+
+      - name: Stage files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = 'dist\stage'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          # The executable is called clipsy.exe for users, not clipsy-windows.exe.
+          Copy-Item 'target\release\clipsy-windows.exe' (Join-Path $stage 'clipsy.exe')
+          Copy-Item 'packaging\windows\README-WINDOWS.txt' (Join-Path $stage 'README-WINDOWS.txt')
+          if (Test-Path 'LICENSE') {
+            Copy-Item 'LICENSE' (Join-Path $stage 'LICENSE.txt')
+          }
+
+      - name: Create the portable zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = "dist\clipsy-${env:VERSION}-windows-x64.zip"
+          Compress-Archive -Path 'dist\stage\*' -DestinationPath $zip -Force
+          if (-not (Test-Path $zip)) { throw "zip was not created: $zip" }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          $src = (Resolve-Path 'dist\stage\clipsy.exe').Path
+          $out = (Resolve-Path 'dist').Path
+          & $iscc "/DAppVersion=${env:VERSION}" "/DSourceExe=$src" "/O$out" 'packaging\windows\clipsy.iss'
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+          $setup = "dist\clipsy-${env:VERSION}-setup.exe"
+          if (-not (Test-Path $setup)) { throw "installer was not created: $setup" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: dist/clipsy-${{ needs.version.outputs.version }}-windows-x64.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-setup
+          path: dist/clipsy-${{ needs.version.outputs.version }}-setup.exe
+          if-no-files-found: error
+
+  release:
+    # Only tag pushes publish. A manual dry run stops after the builds.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, deb, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the build files
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Write SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp packaging/install.sh packaging/uninstall.sh dist/
+          cd dist
+          files=(
+            "clipsy_${VERSION}-1_amd64.deb"
+            "clipsy-${VERSION}-windows-x64.zip"
+            "clipsy-${VERSION}-setup.exe"
+          )
+          for f in "${files[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing release file: $f"
+              exit 1
+            fi
+          done
+          sha256sum "${files[@]}" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish the GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          flags=()
+          case "$GITHUB_REF_NAME" in
+            *-*) flags+=(--prerelease) ;; # for example v0.4.0-rc1
+          esac
+          gh release create "$GITHUB_REF_NAME" \
+            "clipsy_${VERSION}-1_amd64.deb" \
+            "clipsy-${VERSION}-windows-x64.zip" \
+            "clipsy-${VERSION}-setup.exe" \
+            SHA256SUMS install.sh uninstall.sh \
+            --title "Clipsy ${VERSION}" \
+            --generate-notes \
+            "${flags[@]}"

@@ -84,12 +84,13 @@ export function SiteHeader() {
 
         <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
           {sectionLinks.map((link) => (
-            <Button key={link.href} variant="ghost" render={<a href={link.href} />}>
+            <Button key={link.href} variant="ghost" className="h-11" render={<a href={link.href} />}>
               {link.label}
             </Button>
           ))}
           <Button
             variant="ghost"
+            className="h-11"
             render={
               <a href={githubUrl} target="_blank" rel="noopener" />
             }

@@ -17,6 +17,17 @@ pub fn migrate_toggle_default(current: &str) -> String {
     }
 }
 
+/// One-time shortcut migration. `already_migrated` says whether the marker file from an earlier
+/// run exists. Returns the shortcut to use and whether the marker should exist afterwards.
+/// The legacy value only moves on the first run; later runs keep whatever the user chose.
+pub fn migrate_once(current: &str, already_migrated: bool) -> (String, bool) {
+    if already_migrated {
+        (current.to_string(), true)
+    } else {
+        (migrate_toggle_default(current), true)
+    }
+}
+
 /// A parsed hotkey: modifier flags plus a Windows virtual-key code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Accel {
@@ -250,6 +261,35 @@ mod tests {
     fn migrate_keeps_custom_shortcut() {
         assert_eq!(migrate_toggle_default("<Ctrl><Alt>k"), "<Ctrl><Alt>k");
         assert_eq!(migrate_toggle_default("<Super><Shift>v"), "<Super><Shift>v");
+    }
+
+    #[test]
+    fn migrate_once_first_run_moves_legacy_default() {
+        assert_eq!(
+            migrate_once("<Ctrl><Shift>v", false),
+            ("<Super><Shift>v".to_string(), true)
+        );
+    }
+
+    #[test]
+    fn migrate_once_later_run_keeps_legacy_value() {
+        // Once migrated, a user who picks Ctrl+Shift+V in Settings must keep it.
+        assert_eq!(
+            migrate_once("<Ctrl><Shift>v", true),
+            ("<Ctrl><Shift>v".to_string(), true)
+        );
+    }
+
+    #[test]
+    fn migrate_once_custom_shortcut_is_kept_and_marked() {
+        assert_eq!(
+            migrate_once("<Ctrl><Alt>k", false),
+            ("<Ctrl><Alt>k".to_string(), true)
+        );
+        assert_eq!(
+            migrate_once("<Ctrl><Alt>k", true),
+            ("<Ctrl><Alt>k".to_string(), true)
+        );
     }
 
     #[test]

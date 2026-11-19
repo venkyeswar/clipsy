@@ -20,7 +20,7 @@ use slint::{Timer, TimerMode};
 use crate::autostart;
 use crate::backend::WindowsBackend;
 use crate::clear_dialog::confirm_and_clear;
-use crate::hotkey::{migrate_toggle_default, shortcut_label, tray_tooltip, FALLBACK, WINDOWS_DEFAULT};
+use crate::hotkey::{migrate_once, shortcut_label, tray_tooltip, FALLBACK, WINDOWS_DEFAULT};
 use crate::popup::Popup;
 use crate::settings::SettingsWindow;
 use crate::single_instance::{self, Role, Verb};
@@ -113,17 +113,7 @@ pub fn run(args: Vec<String>) -> Result<()> {
             tracing::warn!("could not write the first-run config: {e:#}");
         }
     }
-    {
-        // Older Windows builds defaulted to Ctrl+Shift+V. Only that exact value moves to Win+Shift+V.
-        let mut cfg = config.borrow_mut();
-        let migrated = migrate_toggle_default(&cfg.shortcuts.toggle_popup);
-        if migrated != cfg.shortcuts.toggle_popup {
-            cfg.shortcuts.toggle_popup = migrated;
-            if let Err(e) = cfg.save() {
-                tracing::warn!("could not save the migrated shortcut: {e:#}");
-            }
-        }
-    }
+    migrate_shortcut_once(&config);
     let hotkey_name = config.borrow().shortcuts.toggle_popup.clone();
     // The readable form ("Ctrl+Shift+V") when the shortcut is valid, else the raw text.
     let hotkey_label = shortcut_label(&hotkey_name).unwrap_or_else(|| hotkey_name.clone());
@@ -263,6 +253,35 @@ pub fn run(args: Vec<String>) -> Result<()> {
     // The loop runs until a Quit verb asks it to stop.
     slint::run_event_loop_until_quit().context("the event loop stopped with an error")?;
     Ok(())
+}
+
+/// Marker file in the data directory. Its presence means the shortcut migration already ran.
+const SHORTCUT_MIGRATION_MARKER: &str = "shortcut-migrated-v1";
+
+/// Runs the Win+Shift+V migration once per install. Older builds defaulted to Ctrl+Shift+V, and
+/// only that exact value moves. The marker is written even when nothing changed, so a shortcut
+/// the user picks later is never rewritten. If the config save fails, the marker is not written
+/// and the migration is tried again on the next start.
+fn migrate_shortcut_once(config: &RefCell<Config>) {
+    let marker = data_dir().ok().map(|dir| dir.join(SHORTCUT_MIGRATION_MARKER));
+    let already = marker.as_ref().is_some_and(|path| path.exists());
+    let mut cfg = config.borrow_mut();
+    let (shortcut, mark) = migrate_once(&cfg.shortcuts.toggle_popup, already);
+    let mut saved = true;
+    if shortcut != cfg.shortcuts.toggle_popup {
+        cfg.shortcuts.toggle_popup = shortcut;
+        if let Err(e) = cfg.save() {
+            saved = false;
+            tracing::warn!("could not save the migrated shortcut: {e:#}");
+        }
+    }
+    if mark && !already && saved {
+        if let Some(path) = marker {
+            if let Err(e) = std::fs::write(&path, b"") {
+                tracing::warn!("could not write the shortcut migration marker: {e:#}");
+            }
+        }
+    }
 }
 
 /// Writes the Run value for start at login when the config asks for it. The value is rewritten

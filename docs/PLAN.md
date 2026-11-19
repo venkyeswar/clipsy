@@ -19,13 +19,14 @@
 6. **Works across Linux** — X11 first (user's machine), then GNOME Wayland, KDE, wlroots.
 
 ### Non-goals (v1)
-Cloud/device sync, Windows/macOS, plugin system, OCR.
+Cloud/device sync, macOS, plugin system, OCR. Windows is no longer a non-goal: it is built as Phase W (see section 11).
 
 ## 2. Target environment
 
 - Dev machine: **Ubuntu 24.04.5, GNOME Shell 46, X11 session**.
 - System libs on 24.04: GTK 4.14, libadwaita 1.5 (do not use newer APIs than these).
 - Later: Ubuntu on Wayland (GNOME 46+), KDE Plasma 6, Sway/Hyprland.
+- Windows (Phase W): Windows 10 and 11, 64-bit. Native Slint UI in `crates/clipsy-windows`, not GTK. The Ubuntu dev machine cannot run it; the user tests it on Windows.
 
 ## 3. Tech decisions (final)
 
@@ -299,6 +300,21 @@ Each phase: implement → `cargo clippy -- -D warnings` + `cargo test` clean →
 - [ ] README with screenshots (light + dark), GIF, install docs, LICENSE (GPL-3.0-or-later recommended, matches GNOME ecosystem).
 - [ ] GitHub Actions: build, clippy, test, attach artifacts on tag.
 - [ ] Verify size/perf budgets (§13).
+
+### Phase W — Windows (`crates/clipsy-windows`)
+Built as a native Windows app. Manual checks are in `docs/windows-acceptance.md`; the user runs them on Windows 10/11 and confirms before Phase 2 starts.
+- Clipboard listener: text, images and file lists are saved; password-manager clips are skipped.
+- Global hotkey, default **`Ctrl+Shift+V`** (Windows reserves `Win+V`, so Clipsy cannot use it). Set in `config.toml`.
+- Auto-paste: Ctrl+V, or Ctrl+Shift+V in terminal apps.
+- System tray icon with menu: Open, Pause/Resume capture, Settings, Clear history, Quit.
+- Autostart at login via the `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registry key.
+- Single instance: a second start does not add a second tray icon. CLI verbs (`toggle`, `settings`, `pause`, `resume`, `clear`, `quit`) go to the running copy.
+- Slint popup (search, pins, text/image/file rows, keyboard navigation, closes on focus loss) and Settings window, light/dark/system theme.
+- Data: `%LOCALAPPDATA%\clipsy`. Config: `%APPDATA%\clipsy\config.toml`.
+
+Still to do after the user confirms the Windows acceptance checks (do not start before):
+- Phase 2 website: responsive layout and Windows download/install content.
+- Phase 3 release automation: Setup installer and portable `.exe` (zip), `SHA256SUMS`, GitHub Releases, website deploy on Cloudflare.
 
 ## 12. Manual test checklist
 Apps: Firefox, Chrome, Terminal (gnome-terminal / ptyxis), VS Code, LibreOffice Writer, GIMP, Nautilus, Screenshot tool, Text Editor.

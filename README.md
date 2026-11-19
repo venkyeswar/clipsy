@@ -72,7 +72,95 @@ clipsy quit        # stop Clipsy
 Clipsy works entirely on your machine. History is stored locally, and Clipsy
 makes no network connections, needs no account, and sends no telemetry.
 
-## Build from source
+## Windows (experimental)
+
+Clipsy also has a Windows version. It is new and still being tested, so expect rough edges.
+
+**What works:** copying text, images and files into history; a popup opened with
+**Ctrl+Shift+V**; pick an item and press Enter to paste it; pins and search; history
+kept after restart; a tray icon with a menu; autostart at login; one running copy
+at a time; no network connections.
+
+**Where data lives:** history in `%LOCALAPPDATA%\clipsy`, settings in
+`%APPDATA%\clipsy\config.toml`.
+
+### Build on Windows
+
+You need Windows 10 or 11 (64-bit) and:
+
+1. Install Rust from <https://rustup.rs>. Run the installer and accept the defaults
+   (this installs the MSVC toolchain).
+2. Install **Build Tools for Visual Studio** from <https://visualstudio.microsoft.com/visual-cpp-build-tools/>.
+   In the installer, tick the **Desktop development with C++** workload, then install.
+3. Open **PowerShell** (Start menu, type `powershell`). Go to the Clipsy project folder
+   (the folder that contains this README), for example:
+
+   ```powershell
+   cd C:\Users\<your-name>\clipsy
+   ```
+
+4. Build the app:
+
+   ```powershell
+   cargo build --release -p clipsy-windows
+   ```
+
+   The first build takes a few minutes. When it finishes, the program is at
+   `target\release\clipsy-windows.exe`.
+
+### Run on Windows
+
+Start Clipsy from the same PowerShell window:
+
+```powershell
+.\target\release\clipsy-windows.exe
+```
+
+A Clipsy icon appears in the system tray (the `^` arrow near the clock may hide it;
+drag it out to keep it visible). Copy something, then press **Ctrl+Shift+V** to open
+the popup. Press **Enter** to paste the selected item.
+
+The default hotkey is **Ctrl+Shift+V** because Windows reserves Win+V for its own
+clipboard. To change it, edit `%APPDATA%\clipsy\config.toml` (the `toggle_popup` line
+under `[shortcuts]`) and restart Clipsy.
+
+Clipsy also understands these commands. Run them from a second PowerShell window while
+Clipsy is running:
+
+```powershell
+.\target\release\clipsy-windows.exe toggle     # show or hide the popup
+.\target\release\clipsy-windows.exe settings   # open Settings
+.\target\release\clipsy-windows.exe pause      # stop recording
+.\target\release\clipsy-windows.exe resume     # start recording again
+.\target\release\clipsy-windows.exe clear      # clear history (pinned items are kept)
+.\target\release\clipsy-windows.exe quit       # stop Clipsy
+```
+
+### Windows security warning
+
+The Windows program is not signed yet, so Windows SmartScreen may say
+**"Windows protected your PC"** with the publisher shown as **unknown**. To run it,
+click **More info**, then **Run anyway**.
+
+### Known limits (Windows)
+
+- Clipsy cannot paste into a window that runs as administrator unless Clipsy also runs
+  as administrator. **Do not run Clipsy as administrator.** Paste into normal windows only.
+- Win+V is reserved by Windows and cannot be used for Clipsy.
+- Not yet tested on every Windows setup. The checks in `docs/windows-acceptance.md`
+  list what has been verified.
+
+### Developers: check the Windows code from Ubuntu
+
+You can check that the Windows code compiles from Ubuntu. This does not run the app:
+
+```sh
+sudo apt install gcc-mingw-w64-x86-64
+rustup target add x86_64-pc-windows-gnu
+cargo check -p clipsy-windows --target x86_64-pc-windows-gnu
+```
+
+## Build from source (Linux)
 
 You need a Rust toolchain (stable) and these packages (Ubuntu 24.04):
 

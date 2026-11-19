@@ -15,7 +15,6 @@ pub mod backend;
 pub mod clipboard;
 #[cfg(windows)]
 pub mod paste;
-#[cfg(windows)]
 pub mod single_instance;
 #[cfg(windows)]
 pub mod tray;

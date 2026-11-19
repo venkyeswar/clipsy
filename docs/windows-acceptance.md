@@ -178,7 +178,8 @@ in the list (step 7). The menu label changes between "Pause capture" and "Resume
 
 Steps:
 1. Right-click the tray icon, click **Settings**. The window title is **Clipsy settings**.
-2. In the **General** group, tick the checkbox **Start Clipsy when I sign in**.
+2. In the **General** group, make sure the **Start Clipsy when I sign in** checkbox is ticked
+   (it is on by default; if it is already ticked, leave it).
 3. Click **Save** at the bottom of the window.
 4. In PowerShell, run:
 

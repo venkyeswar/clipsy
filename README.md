@@ -134,10 +134,10 @@ Good to know:
   toggles the popup in the running copy.
 - The "Clipsy is running" message is only written to the console window. There is no on-screen notice yet.
 - If you move the program to another folder, start it once from the new place. While
-  autostart is on, the login entry is updated on each start. Clipsy also shows
-an icon in the system tray (the `^` arrow near the clock may hide it; drag it out to keep
-it visible). Copy something, then press **Ctrl+Shift+V** to open the popup. Press **Enter**
-to paste the selected item.
+  autostart is on, the login entry is updated on each start.
+- Clipsy also shows an icon in the system tray (the `^` arrow near the clock may hide it; drag
+  it out to keep it visible). Copy something, then press **Ctrl+Shift+V** to open the popup.
+  Press **Enter** to paste the selected item.
 
 The default hotkey is **Ctrl+Shift+V** because Windows reserves Win+V for its own
 clipboard. You can change it in the Settings window (tray icon > **Settings**, field

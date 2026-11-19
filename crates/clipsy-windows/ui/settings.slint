@@ -1,0 +1,224 @@
+// The settings window. Rust (src/settings.rs) fills the properties every time the
+// window is shown, reads them back on Save, and checks the shortcut as it is typed
+// (`shortcut-edited`). Nothing here saves anything by itself.
+
+import { Button, CheckBox, ComboBox, GroupBox, LineEdit, ScrollView } from "std-widgets.slint";
+
+// A labelled text field. The label sits on the left, the field fills the rest.
+component Field inherits HorizontalLayout {
+    in property <string> label;
+    in-out property <string> value;
+    callback edited(string);
+    spacing: 12px;
+
+    Text {
+        text: root.label;
+        vertical-alignment: center;
+        min-width: 190px;
+        wrap: word-wrap;
+    }
+    LineEdit {
+        text <=> root.value;
+        horizontal-stretch: 1;
+        edited(text) => { root.edited(text); }
+    }
+}
+
+export component SettingsDialog inherits Window {
+    title: "Clipsy settings";
+    width: 520px;
+    height: 640px;
+
+    // general
+    in-out property <bool> autostart;
+    in-out property <string> max-items;
+    in-out property <string> keep-days;
+    in-out property <string> keep-pinned-days;
+    in-out property <bool> paste-on-select;
+    in-out property <bool> save-images;
+    in-out property <bool> save-files;
+    in-out property <string> terminal-apps;
+
+    // appearance
+    in-out property <string> theme;
+    in-out property <string> popup-position;
+    in-out property <bool> compact;
+    in-out property <bool> show-source-app;
+
+    // shortcuts. Rust sets `hotkey-error` to the reason, or "" when the shortcut is valid.
+    in-out property <string> toggle-popup;
+    in-out property <string> hotkey-error;
+
+    // privacy
+    in-out property <bool> paused;
+    in-out property <bool> skip-sensitive;
+    in-out property <string> ignored-apps;
+    in-out property <bool> clear-on-exit;
+
+    // Rust sets this when Save fails (for example the registry or the disk).
+    in-out property <string> save-error;
+
+    callback shortcut-edited(string);
+    callback save-requested();
+    callback cancel-requested();
+
+    property <color> error-color: #c01c28;
+    property <color> muted-color: #5f6368;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+
+        ScrollView {
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                padding-right: 8px;
+                spacing: 14px;
+
+                GroupBox {
+                    title: "General";
+                    VerticalLayout {
+                        spacing: 8px;
+                        CheckBox {
+                            text: "Start Clipsy when I sign in";
+                            checked <=> root.autostart;
+                        }
+                        Field {
+                            label: "Maximum items";
+                            value <=> root.max-items;
+                        }
+                        Field {
+                            label: "Delete unpinned items after (days, 0 = never)";
+                            value <=> root.keep-days;
+                        }
+                        Field {
+                            label: "Delete pinned items after (days, 0 = never)";
+                            value <=> root.keep-pinned-days;
+                        }
+                        CheckBox {
+                            text: "Paste straight into the app when I pick an item";
+                            checked <=> root.paste-on-select;
+                        }
+                        CheckBox {
+                            text: "Save images";
+                            checked <=> root.save-images;
+                        }
+                        CheckBox {
+                            text: "Save copied files";
+                            checked <=> root.save-files;
+                        }
+                        Field {
+                            label: "Terminal apps (comma-separated)";
+                            value <=> root.terminal-apps;
+                        }
+                    }
+                }
+
+                GroupBox {
+                    title: "Appearance";
+                    VerticalLayout {
+                        spacing: 8px;
+                        HorizontalLayout {
+                            spacing: 12px;
+                            Text {
+                                text: "Theme";
+                                vertical-alignment: center;
+                                min-width: 190px;
+                            }
+                            ComboBox {
+                                model: ["system", "light", "dark"];
+                                current-value <=> root.theme;
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            Text {
+                                text: "Popup position";
+                                vertical-alignment: center;
+                                min-width: 190px;
+                            }
+                            ComboBox {
+                                model: ["cursor", "center"];
+                                current-value <=> root.popup-position;
+                            }
+                        }
+                        CheckBox {
+                            text: "Compact rows";
+                            checked <=> root.compact;
+                        }
+                        CheckBox {
+                            text: "Show the app each item was copied from";
+                            checked <=> root.show-source-app;
+                        }
+                    }
+                }
+
+                GroupBox {
+                    title: "Shortcuts";
+                    VerticalLayout {
+                        spacing: 4px;
+                        Field {
+                            label: "Show popup";
+                            value <=> root.toggle-popup;
+                            edited(text) => { root.shortcut-edited(text); }
+                        }
+                        Text {
+                            text: root.hotkey-error == ""
+                                ? "Example: <Ctrl><Shift>v"
+                                : root.hotkey-error;
+                            color: root.hotkey-error == "" ? root.muted-color : root.error-color;
+                            wrap: word-wrap;
+                            font-size: 12px;
+                        }
+                    }
+                }
+
+                GroupBox {
+                    title: "Privacy";
+                    VerticalLayout {
+                        spacing: 8px;
+                        CheckBox {
+                            text: "Pause recording";
+                            checked <=> root.paused;
+                        }
+                        CheckBox {
+                            text: "Skip passwords and other sensitive copies";
+                            checked <=> root.skip-sensitive;
+                        }
+                        Field {
+                            label: "Ignored apps (comma-separated)";
+                            value <=> root.ignored-apps;
+                        }
+                        CheckBox {
+                            text: "Clear history when Clipsy quits";
+                            checked <=> root.clear-on-exit;
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: root.save-error;
+            color: root.error-color;
+            wrap: word-wrap;
+            visible: root.save-error != "";
+        }
+
+        HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+            Button {
+                text: "Cancel";
+                clicked => { root.cancel-requested(); }
+            }
+            Button {
+                text: "Save";
+                primary: true;
+                enabled: root.hotkey-error == "";
+                clicked => { root.save-requested(); }
+            }
+        }
+    }
+}

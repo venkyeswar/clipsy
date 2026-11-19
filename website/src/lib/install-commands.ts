@@ -33,6 +33,13 @@ export type InstallTab = {
 export const SNAP_APP_CENTER_URL = "snap://clipsy";
 export const SNAP_REFRESH_COMMAND = "sudo snap refresh clipsy";
 export const CHECKSUM_VERIFY_COMMAND = "sha256sum -c --ignore-missing SHA256SUMS";
+export const WINDOWS_SHORTCUT_TEXT = "Ctrl+Shift+V";
+export const WINDOWS_BUILD_COMMANDS = [
+  "git clone https://github.com/venkyeswar/clipsy.git",
+  "cd clipsy",
+  "cargo build --release -p clipsy-windows",
+  ".\\target\\release\\clipsy-windows.exe",
+];
 export const SOURCE_BUILD_COMMANDS = [
   "sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev libx11-dev",
   "cargo build --release -p clipsy-app",
@@ -63,6 +70,55 @@ function withCommands(tab: Omit<InstallTab, "commands">): InstallTab {
 
 function openStep(where: string): InstallStep {
   return { title: "Open Clipsy", detail: `${where} After that it starts when you log in.`, commands: [] };
+}
+
+/**
+ * Beginner steps for Windows. Without release data the file-name commands stay empty
+ * and the steps are marked needsRelease, like the .deb steps.
+ */
+export function windowsInstallSteps(release?: Release): InstallStep[] {
+  const installer = release?.windowsInstaller?.name;
+  const portable = release?.windowsPortable?.name;
+  const sums = release?.sha256sums ?? release?.checksums;
+  const version = release ? `Clipsy ${release.version}` : "Clipsy";
+  const verifyCommands =
+    installer && sums
+      ? [
+          `Get-FileHash .\\${installer} -Algorithm SHA256`,
+          `(Get-Content .\\SHA256SUMS | Select-String "${installer}").Line`,
+        ]
+      : [];
+
+  return [
+    {
+      title: "Install with the setup file (recommended)",
+      detail: `Download ${installer ?? "the setup .exe"} from the latest release (${version}) and double-click it. Windows SmartScreen may say "Windows protected your PC" because the file is not signed yet. Click More info, then Run anyway.`,
+      commands: [],
+      needsRelease: true,
+    },
+    {
+      title: "Or use the portable zip",
+      detail: `Download ${portable ?? "the windows-x64 .zip"}, right-click it and choose Extract All. Open the new folder and double-click clipsy.exe. Nothing is installed, so you can run it from a USB stick.`,
+      commands: [],
+      needsRelease: true,
+    },
+    {
+      title: "Check the download (optional)",
+      detail: "Makes sure the file arrived complete and unchanged. Download SHA256SUMS from the same release into the same folder. The first command prints a hash, and the second prints the matching line from SHA256SUMS. The two hashes should match.",
+      commands: verifyCommands,
+      needsRelease: true,
+    },
+    {
+      title: "Or build from source",
+      detail: "For developers. You need Rust with the MSVC toolchain (rustup.rs) and the Visual Studio Build Tools C++ workload. Takes a few minutes the first time.",
+      commands: [...WINDOWS_BUILD_COMMANDS],
+    },
+    {
+      title: "Open Clipsy",
+      detail: `Clipsy runs in the system tray. Press ${WINDOWS_SHORTCUT_TEXT} to open your clipboard history.`,
+      commands: [],
+    },
+  ];
 }
 
 export function installCommands(

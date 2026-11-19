@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { compareVersions, latestStable, parseReleases } from "./releases";
+import {
+  compareVersions,
+  hasWindows,
+  latestStable,
+  latestWithWindows,
+  parseReleases,
+  windowsStatus,
+} from "./releases";
 
 const asset = (name: string, size = 10) => ({
   name,
@@ -111,5 +118,97 @@ describe("releases", () => {
       release({ tag_name: "v1.0.0", published_at: "2026-02-01T00:00:00Z" }),
     ]);
     expect(releases.map((r) => r.version)).toEqual(["1.0.0", "1.0.0-rc.1", "0.10.0", "0.9.2"]);
+  });
+
+  it("parseReleases_exposes_windows_and_sha256sums_assets", () => {
+    const [r] = parseReleases([
+      release({
+        assets: [
+          asset("clipsy-0.5.0-setup.exe", 7),
+          asset("clipsy-0.5.0-windows-x64.zip", 8),
+          asset("SHA256SUMS", 9),
+          asset("install.sh", 10),
+        ],
+      }),
+    ]);
+    expect(r.windowsInstaller).toEqual({
+      name: "clipsy-0.5.0-setup.exe",
+      url: "https://example.test/download/clipsy-0.5.0-setup.exe",
+      size: 7,
+    });
+    expect(r.windowsPortable).toEqual({
+      name: "clipsy-0.5.0-windows-x64.zip",
+      url: "https://example.test/download/clipsy-0.5.0-windows-x64.zip",
+      size: 8,
+    });
+    expect(r.sha256sums).toEqual({
+      name: "SHA256SUMS",
+      url: "https://example.test/download/SHA256SUMS",
+      size: 9,
+    });
+    expect(r.checksums).toEqual(r.sha256sums);
+    expect(r.deb).toBeUndefined();
+  });
+
+  it("parseReleases_matches_windows_assets_by_filename_pattern", () => {
+    const [r] = parseReleases([
+      release({
+        assets: [
+          asset("Clipsy-0.5.0-SETUP.EXE"),
+          asset("clipsy-0.5.0-windows-x64.zip.sig"),
+          asset("clipsy_0.5.0_amd64.deb"),
+          asset("clipsy-0.5.0-windows-arm64.zip"),
+          asset("clipsy-0.5.0-linux-x86_64.tar.gz"),
+        ],
+      }),
+    ]);
+    expect(r.windowsInstaller?.name).toBe("Clipsy-0.5.0-SETUP.EXE");
+    expect(r.windowsPortable).toBeUndefined();
+    expect(r.sha256sums).toBeUndefined();
+  });
+
+  it("hasWindows_is_true_for_installer_or_portable", () => {
+    const [both, onlyInstaller, onlyPortable, onlyDeb] = parseReleases([
+      release({
+        tag_name: "v0.5.0",
+        assets: [asset("clipsy-0.5.0-setup.exe"), asset("clipsy-0.5.0-windows-x64.zip")],
+      }),
+      release({ tag_name: "v0.4.0", assets: [asset("clipsy-0.4.0-setup.exe")] }),
+      release({ tag_name: "v0.3.0", assets: [asset("clipsy-0.3.0-windows-x64.zip")] }),
+      release({ tag_name: "v0.2.0", assets: [asset("clipsy_0.2.0_amd64.deb")] }),
+    ]);
+    expect(hasWindows(both)).toBe(true);
+    expect(hasWindows(onlyInstaller)).toBe(true);
+    expect(hasWindows(onlyPortable)).toBe(true);
+    expect(hasWindows(onlyDeb)).toBe(false);
+  });
+
+  it("latestWithWindows_picks_newest_stable_release_with_windows_assets", () => {
+    const releases = parseReleases([
+      release({ tag_name: "v0.6.0-rc.1", prerelease: true, assets: [asset("clipsy-0.6.0-rc.1-setup.exe")] }),
+      release({ tag_name: "v0.5.0", assets: [asset("clipsy_0.5.0_amd64.deb")] }),
+      release({ tag_name: "v0.4.0", assets: [asset("clipsy-0.4.0-setup.exe")] }),
+      release({ tag_name: "v0.3.0", assets: [asset("clipsy-0.3.0-windows-x64.zip")] }),
+    ]);
+    expect(latestWithWindows(releases)?.version).toBe("0.4.0");
+  });
+
+  it("latestWithWindows_ignores_prerelease_with_suffix_even_when_not_flagged", () => {
+    const releases = parseReleases([
+      release({ tag_name: "v0.6.0-beta.1", assets: [asset("clipsy-0.6.0-beta.1-setup.exe")] }),
+    ]);
+    expect(latestWithWindows(releases)).toBeUndefined();
+  });
+
+  it("latestWithWindows_returns_undefined_for_empty_list", () => {
+    expect(latestWithWindows([])).toBeUndefined();
+  });
+
+  it("windowsStatus_is_available_only_when_a_windows_release_exists", () => {
+    const withWindows = parseReleases([release({ assets: [asset("clipsy-0.2.0-setup.exe")] })]);
+    const withoutWindows = parseReleases([release({ assets: [asset("clipsy_0.2.0_amd64.deb")] })]);
+    expect(windowsStatus(withWindows)).toBe("available");
+    expect(windowsStatus(withoutWindows)).toBe("coming-soon");
+    expect(windowsStatus([])).toBe("coming-soon");
   });
 });

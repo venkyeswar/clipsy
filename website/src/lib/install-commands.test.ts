@@ -1,6 +1,7 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   installCommands,
+  windowsInstallSteps,
   latestDownloadUrl,
   NOSUDO_INSTALLER_URL,
   NOSUDO_UNINSTALL_COMMAND,
@@ -114,4 +115,90 @@ it("source_tab_clones_builds_and_runs", () => {
     "./target/release/clipsy",
   ]);
   expect(tab("source").extras.map((extra) => extra.label)).toEqual(["Update"]);
+});
+
+const windowsRelease: Release = {
+  ...release,
+  version: "0.5.0",
+  tag: "v0.5.0",
+  windowsInstaller: {
+    name: "clipsy-0.5.0-setup.exe",
+    url: "https://example.test/clipsy-0.5.0-setup.exe",
+    size: 1,
+  },
+  windowsPortable: {
+    name: "clipsy-0.5.0-windows-x64.zip",
+    url: "https://example.test/clipsy-0.5.0-windows-x64.zip",
+    size: 1,
+  },
+  sha256sums: { name: "SHA256SUMS", url: "https://example.test/SHA256SUMS", size: 1 },
+};
+
+const windowsStep = (title: string, release?: Release) => {
+  const found = windowsInstallSteps(release).find((step) => step.title === title);
+  if (!found) throw new Error(`missing step ${title}`);
+  return found;
+};
+
+describe("windowsInstallSteps", () => {
+  it("lists the beginner steps in order", () => {
+    expect(windowsInstallSteps(windowsRelease).map((step) => step.title)).toEqual([
+      "Install with the setup file (recommended)",
+      "Or use the portable zip",
+      "Check the download (optional)",
+      "Or build from source",
+      "Open Clipsy",
+    ]);
+  });
+
+  it("gives exact PowerShell verification commands for the fixture version", () => {
+    const verify = windowsStep("Check the download (optional)", windowsRelease);
+    expect(verify.commands).toEqual([
+      "Get-FileHash .\\clipsy-0.5.0-setup.exe -Algorithm SHA256",
+      '(Get-Content .\\SHA256SUMS | Select-String "clipsy-0.5.0-setup.exe").Line',
+    ]);
+    expect(verify.detail).toContain("SHA256SUMS");
+  });
+
+  it("gives exact build-from-source commands", () => {
+    const source = windowsStep("Or build from source", windowsRelease);
+    expect(source.commands).toEqual([
+      "git clone https://github.com/venkyeswar/clipsy.git",
+      "cd clipsy",
+      "cargo build --release -p clipsy-windows",
+      ".\\target\\release\\clipsy-windows.exe",
+    ]);
+    expect(source.detail).toContain("Visual Studio Build Tools");
+    expect(source.needsRelease).toBeFalsy();
+  });
+
+  it("explains SmartScreen for the installer and the portable zip steps", () => {
+    const installer = windowsStep("Install with the setup file (recommended)", windowsRelease);
+    expect(installer.detail).toContain("clipsy-0.5.0-setup.exe");
+    expect(installer.detail).toContain("More info");
+    expect(installer.detail).toContain("Run anyway");
+    expect(installer.commands).toEqual([]);
+    const portable = windowsStep("Or use the portable zip", windowsRelease);
+    expect(portable.detail).toContain("clipsy-0.5.0-windows-x64.zip");
+    expect(portable.detail).toContain("Extract All");
+    expect(portable.detail).toContain("clipsy.exe");
+    expect(portable.commands).toEqual([]);
+  });
+
+  it("uses Ctrl+Shift+V in the first-use step", () => {
+    const open = windowsStep("Open Clipsy", windowsRelease);
+    expect(open.detail).toContain("Ctrl+Shift+V");
+    expect(open.detail).not.toContain("Super");
+  });
+
+  it("marks release-dependent steps while the release is loading", () => {
+    const steps = windowsInstallSteps(undefined);
+    expect(steps.filter((step) => step.needsRelease).map((step) => step.title)).toEqual([
+      "Install with the setup file (recommended)",
+      "Or use the portable zip",
+      "Check the download (optional)",
+    ]);
+    expect(windowsStep("Check the download (optional)").commands).toEqual([]);
+    expect(windowsStep("Or build from source").commands).toHaveLength(4);
+  });
 });

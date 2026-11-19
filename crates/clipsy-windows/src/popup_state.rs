@@ -159,6 +159,14 @@ pub fn fit_size_to_area(size: (i32, i32), area: (i32, i32, i32, i32)) -> (i32, i
     (size.0.min(right - left).max(0), size.1.min(bottom - top).max(0))
 }
 
+/// Cap a popup size (physical px) to the room left in the work area from the popup's top-left
+/// corner. Used while a resize drag runs: the window is not moved, so the bottom and right edges
+/// stay inside the area and the top-left stays where it is. A negative room gives 0.
+pub fn fit_size_from_origin(size: (i32, i32), origin: (i32, i32), area: (i32, i32, i32, i32)) -> (i32, i32) {
+    let (_, _, right, bottom) = area;
+    ((size.0).min(right - origin.0).max(0), (size.1).min(bottom - origin.1).max(0))
+}
+
 /// How many items a clear would remove. Pinned items are kept unless `also_pinned` is true.
 pub fn clearable_count(total: usize, pinned: usize, also_pinned: bool) -> usize {
     if also_pinned {
@@ -407,5 +415,24 @@ mod tests {
         assert_eq!(fit_size_to_area((1000, 1200), (0, 0, 1920, 1040)), (1000, 1040));
         assert_eq!(fit_size_to_area((2500, 500), (0, 0, 1920, 1040)), (1920, 500));
         assert_eq!(fit_size_to_area((600, 400), (0, 0, 1920, 1040)), (600, 400));
+    }
+
+    #[test]
+    fn fit_size_handles_a_negative_origin_work_area() {
+        // A monitor to the left of the primary one has negative x; its work area is (-1920, -100, 0, 1040).
+        assert_eq!(fit_size_to_area((2500, 2000), (-1920, -100, 0, 1040)), (1920, 1140));
+        assert_eq!(fit_size_to_area((600, 400), (-1920, -100, 0, 1040)), (600, 400));
+    }
+
+    #[test]
+    fn fit_from_origin_caps_to_the_room_left_from_the_top_left() {
+        // Top-left at (-1000, 100) on a secondary monitor with work area (-1920, -100, 0, 1040).
+        assert_eq!(fit_size_from_origin((1200, 1200), (-1000, 100), (-1920, -100, 0, 1040)), (1000, 940));
+        assert_eq!(fit_size_from_origin((600, 400), (-1000, 100), (-1920, -100, 0, 1040)), (600, 400));
+    }
+
+    #[test]
+    fn fit_from_origin_never_goes_negative() {
+        assert_eq!(fit_size_from_origin((600, 400), (5000, 5000), (0, 0, 1920, 1040)), (0, 0));
     }
 }

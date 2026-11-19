@@ -30,8 +30,8 @@ use winreg::RegKey;
 use crate::backend::WindowsBackend;
 use crate::paste::SendBlocked;
 use crate::popup_state::{
-    clamp_to_area, clear_message, clearable_count, drag_popup_size, fit_size_to_area, paste_mode_for,
-    selection_after_delete, PopupState,
+    clamp_to_area, clear_message, clearable_count, drag_popup_size, fit_size_from_origin, fit_size_to_area,
+    paste_mode_for, selection_after_delete, PopupState,
 };
 use crate::ui::{ClipPopup, RowData};
 
@@ -265,6 +265,11 @@ impl Inner {
         });
 
         let w = me.clone();
+        self.window.on_resize_ended(move || {
+            with_inner(&w, |i| i.resize_drag.set(None));
+        });
+
+        let w = me.clone();
         self.window.on_hide_requested(move || {
             with_inner(&w, |i| i.hide());
         });
@@ -310,7 +315,9 @@ impl Inner {
             tracing::warn!("could not show the popup: {e}");
             return;
         }
-        // The scale factor and size are final only once the window exists, so place it again.
+        // The scale factor and size are final only once the window exists, so fit the size and
+        // place it again.
+        self.fit_stored_size();
         self.place(centered);
         self.focus_pending.set(true);
         self.settle(RETRIES);
@@ -392,24 +399,47 @@ impl Inner {
         self.size.set(size);
     }
 
-    /// Apply a logical size to the window, capped to the work area of the monitor it is on,
-    /// and move the window up or left if the bigger size would go past the bottom or right edge.
-    /// A no-frame window has no other way to get back, so the grip has to stay on screen.
+    /// Apply a logical size during a drag. The size is capped to the room left in the work area
+    /// from the window's top-left corner, and the window is not moved. So the bottom and right
+    /// edges stay on screen, and the top-left does not creep up while the drag goes on and back.
     /// Returns the logical size that was applied.
     fn fit_to_work_area(&self, width: f32, height: f32) -> (f32, f32) {
         let window = self.window.window();
         let scale = window.scale_factor();
         let wanted = ((width * scale).round() as i32, (height * scale).round() as i32);
         let position = window.position();
-        let Some(area) = work_area_at((position.x, position.y)) else {
+        let origin = (position.x, position.y);
+        let Some(area) = work_area_at(origin) else {
             window.set_size(LogicalSize::new(width, height));
             return (width, height);
         };
-        let fitted = fit_size_to_area(wanted, area);
-        let (x, y) = clamp_to_area((position.x, position.y), fitted, area);
+        let fitted = fit_size_from_origin(wanted, origin, area);
+        // Only a window that is already outside the area is moved; otherwise this is a no-op.
+        let (x, y) = clamp_to_area(origin, fitted, area);
         window.set_size(PhysicalSize::new(fitted.0.max(1) as u32, fitted.1.max(1) as u32));
-        window.set_position(PhysicalPosition::new(x, y));
+        if (x, y) != origin {
+            window.set_position(PhysicalPosition::new(x, y));
+        }
         (fitted.0 as f32 / scale, fitted.1 as f32 / scale)
+    }
+
+    /// Fit the remembered size to the work area of the monitor the popup opens on, so a size
+    /// from a bigger screen cannot put the grip off screen. Runs once the window exists, when
+    /// the scale factor is known.
+    fn fit_stored_size(&self) {
+        let window = self.window.window();
+        let scale = window.scale_factor();
+        let (width, height) = self.size.get();
+        let wanted = ((width * scale).round() as i32, (height * scale).round() as i32);
+        let Some(area) = work_area_at(cursor_position().unwrap_or((0, 0))) else {
+            return;
+        };
+        let fitted = fit_size_to_area(wanted, area);
+        if fitted == wanted {
+            return;
+        }
+        self.size.set((fitted.0 as f32 / scale, fitted.1 as f32 / scale));
+        window.set_size(PhysicalSize::new(fitted.0.max(1) as u32, fitted.1.max(1) as u32));
     }
 
     fn hide(&self) {

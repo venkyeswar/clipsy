@@ -116,6 +116,7 @@ export component ClipPopup inherits Window {
     // sets the window size, so these carry no numbers.
     callback resize-started();
     callback resize-dragged();
+    callback resize-ended();
 
     // Clear-history overlay. Rust sets the message and whether Clear is allowed, and handles
     // the confirm. Slint toggles the checkbox and closes the overlay on Cancel and Escape.
@@ -125,7 +126,6 @@ export component ClipPopup inherits Window {
     in property <bool> clear-can-clear: false;
     callback clear-also-pinned-changed(bool);
     callback clear-confirmed();
-
 
     property <color> bg: root.dark ? #202124 : #ffffff;
     property <color> fg: root.dark ? #f1f3f4 : #202124;
@@ -503,6 +503,9 @@ export component ClipPopup inherits Window {
             pointer-event(event) => {
                 if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
                     root.resize-started();
+                }
+                if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
+                    root.resize-ended();
                 }
             }
             moved => {

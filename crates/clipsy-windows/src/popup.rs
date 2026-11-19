@@ -30,7 +30,7 @@ use winreg::RegKey;
 use crate::backend::WindowsBackend;
 use crate::paste::SendBlocked;
 use crate::popup_state::{
-    clamp_to_area, clear_message, clearable_count, drag_popup_size, fit_size_from_origin, fit_size_to_area,
+    clamp_to_area, clear_message, clearable_count, drag_popup_size, drag_window_fit, fit_size_to_area,
     paste_mode_for, selection_after_delete, PopupState,
 };
 use crate::ui::{ClipPopup, RowData};
@@ -315,9 +315,7 @@ impl Inner {
             tracing::warn!("could not show the popup: {e}");
             return;
         }
-        // The scale factor and size are final only once the window exists, so fit the size and
-        // place it again.
-        self.fit_stored_size();
+        // The scale factor is final only once the window exists, so place it again.
         self.place(centered);
         self.focus_pending.set(true);
         self.settle(RETRIES);
@@ -385,7 +383,7 @@ impl Inner {
     }
 
     /// The resize grip is being dragged: the size is the size at the press plus the cursor's
-    /// movement since then. The window stays on the work area; see `fit_to_work_area`.
+    /// movement since then. The window stays on the work area; see `apply_drag_size`.
     fn resize_dragged(&self) {
         let Some((cursor_start, size_start)) = self.resize_drag.get() else {
             return;
@@ -395,51 +393,28 @@ impl Inner {
         };
         let scale = self.window.window().scale_factor();
         let (width, height) = drag_popup_size(size_start, cursor_start, cursor, scale);
-        let size = self.fit_to_work_area(width, height);
-        self.size.set(size);
+        self.size.set((width, height));
+        self.apply_drag_size((width, height));
     }
 
-    /// Apply a logical size during a drag. The size is capped to the room left in the work area
-    /// from the window's top-left corner, and the window is not moved. So the bottom and right
-    /// edges stay on screen, and the top-left does not creep up while the drag goes on and back.
-    /// Returns the logical size that was applied.
-    fn fit_to_work_area(&self, width: f32, height: f32) -> (f32, f32) {
+    /// Show the size the user dragged to, on the work area: capped to the room left from the
+    /// window's top-left, and the window is moved only if it starts outside the area. The
+    /// remembered size (`self.size`) is not changed, so a later show can use the full size.
+    fn apply_drag_size(&self, logical: (f32, f32)) {
         let window = self.window.window();
         let scale = window.scale_factor();
-        let wanted = ((width * scale).round() as i32, (height * scale).round() as i32);
+        let wanted = to_physical(logical, scale);
         let position = window.position();
         let origin = (position.x, position.y);
         let Some(area) = work_area_at(origin) else {
-            window.set_size(LogicalSize::new(width, height));
-            return (width, height);
-        };
-        let fitted = fit_size_from_origin(wanted, origin, area);
-        // Only a window that is already outside the area is moved; otherwise this is a no-op.
-        let (x, y) = clamp_to_area(origin, fitted, area);
-        window.set_size(PhysicalSize::new(fitted.0.max(1) as u32, fitted.1.max(1) as u32));
-        if (x, y) != origin {
-            window.set_position(PhysicalPosition::new(x, y));
-        }
-        (fitted.0 as f32 / scale, fitted.1 as f32 / scale)
-    }
-
-    /// Fit the remembered size to the work area of the monitor the popup opens on, so a size
-    /// from a bigger screen cannot put the grip off screen. Runs once the window exists, when
-    /// the scale factor is known.
-    fn fit_stored_size(&self) {
-        let window = self.window.window();
-        let scale = window.scale_factor();
-        let (width, height) = self.size.get();
-        let wanted = ((width * scale).round() as i32, (height * scale).round() as i32);
-        let Some(area) = work_area_at(cursor_position().unwrap_or((0, 0))) else {
+            window.set_size(LogicalSize::new(logical.0, logical.1));
             return;
         };
-        let fitted = fit_size_to_area(wanted, area);
-        if fitted == wanted {
-            return;
+        let (size, pos) = drag_window_fit(wanted, origin, area);
+        window.set_size(PhysicalSize::new(size.0 as u32, size.1 as u32));
+        if pos != origin {
+            window.set_position(PhysicalPosition::new(pos.0, pos.1));
         }
-        self.size.set((fitted.0 as f32 / scale, fitted.1 as f32 / scale));
-        window.set_size(PhysicalSize::new(fitted.0.max(1) as u32, fitted.1.max(1) as u32));
     }
 
     fn hide(&self) {
@@ -698,14 +673,17 @@ impl Inner {
     /// scale is only right once the window exists, so `show` calls this again after showing.
     fn place(&self, centered: bool) {
         let scale = self.window.window().scale_factor();
-        let (width, height) = self.size.get();
-        let size = ((width * scale).round() as i32, (height * scale).round() as i32);
+        let wanted = to_physical(self.size.get(), scale);
 
         let cursor = cursor_position();
-        // Without a work area, leave the position to Slint's default.
+        // Without a work area, leave the position to Slint's default, at the remembered size.
         let Some(area) = work_area_at(cursor.unwrap_or_default()) else {
+            self.window.window().set_size(PhysicalSize::new(wanted.0 as u32, wanted.1 as u32));
             return;
         };
+        // The remembered size may be bigger than this monitor's work area, so show it capped.
+        let size = fit_size_to_area(wanted, area);
+        self.window.window().set_size(PhysicalSize::new(size.0 as u32, size.1 as u32));
 
         let wanted = match cursor {
             Some(cursor) if !centered => cursor,
@@ -758,6 +736,11 @@ impl Inner {
         self.hwnd.set(found.0 as isize);
         Some(found)
     }
+}
+
+/// A logical size in physical pixels at `scale`.
+fn to_physical(logical: (f32, f32), scale: f32) -> (i32, i32) {
+    ((logical.0 * scale).round() as i32, (logical.1 * scale).round() as i32)
 }
 
 /// The mouse pointer's screen position, or `None` if Windows cannot say.

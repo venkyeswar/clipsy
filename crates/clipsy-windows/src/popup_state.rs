@@ -153,18 +153,39 @@ pub fn drag_popup_size(start: (f32, f32), cursor_start: (i32, i32), cursor_now: 
 }
 
 /// Cap a popup size (physical px) to the size of the work area, so the popup cannot be bigger
-/// than the screen area it has to fit in. `area` is (left, top, right, bottom).
+/// than the screen area it has to fit in. `area` is (left, top, right, bottom). Each side is at
+/// least 1, so the result is never a zero-sized window.
+///
+/// Minimum precedence: the 320x300 minimum is applied to the user's size (`clamp_popup_size`)
+/// before this runs. When the work area is smaller than the minimum, the work area wins, so the
+/// popup stays on screen.
 pub fn fit_size_to_area(size: (i32, i32), area: (i32, i32, i32, i32)) -> (i32, i32) {
     let (left, top, right, bottom) = area;
-    (size.0.min(right - left).max(0), size.1.min(bottom - top).max(0))
+    (size.0.min(right - left).max(1), size.1.min(bottom - top).max(1))
 }
 
-/// Cap a popup size (physical px) to the room left in the work area from the popup's top-left
-/// corner. Used while a resize drag runs: the window is not moved, so the bottom and right edges
-/// stay inside the area and the top-left stays where it is. A negative room gives 0.
-pub fn fit_size_from_origin(size: (i32, i32), origin: (i32, i32), area: (i32, i32, i32, i32)) -> (i32, i32) {
-    let (_, _, right, bottom) = area;
-    ((size.0).min(right - origin.0).max(0), (size.1).min(bottom - origin.1).max(0))
+/// Size and top-left for the window during a resize-grip drag (physical px).
+///
+/// The size is capped to the work area first. Then, if the origin is inside the area, the window
+/// is not moved; the size is capped to the room left from the origin, so the bottom and right
+/// edges stay on screen and the top-left does not creep while the drag goes on and back. If the
+/// origin is outside the area, the window is first moved inside (`clamp_to_area`), and the room
+/// is taken from the moved position. Each side is at least 1. The work area wins over the
+/// minimum, as in `fit_size_to_area`.
+pub fn drag_window_fit(
+    wanted: (i32, i32),
+    origin: (i32, i32),
+    area: (i32, i32, i32, i32),
+) -> ((i32, i32), (i32, i32)) {
+    let (left, top, right, bottom) = area;
+    let size = fit_size_to_area(wanted, area);
+    let inside = origin.0 >= left && origin.0 < right && origin.1 >= top && origin.1 < bottom;
+    let pos = if inside { origin } else { clamp_to_area(origin, size, area) };
+    let size = (
+        size.0.min(right - pos.0).max(1),
+        size.1.min(bottom - pos.1).max(1),
+    );
+    (size, pos)
 }
 
 /// How many items a clear would remove. Pinned items are kept unless `also_pinned` is true.
@@ -425,14 +446,59 @@ mod tests {
     }
 
     #[test]
-    fn fit_from_origin_caps_to_the_room_left_from_the_top_left() {
-        // Top-left at (-1000, 100) on a secondary monitor with work area (-1920, -100, 0, 1040).
-        assert_eq!(fit_size_from_origin((1200, 1200), (-1000, 100), (-1920, -100, 0, 1040)), (1000, 940));
-        assert_eq!(fit_size_from_origin((600, 400), (-1000, 100), (-1920, -100, 0, 1040)), (600, 400));
+    fn remembered_size_is_not_shrunk_by_a_capped_drag() {
+        // The user drags to 420x800. A low spot on screen only leaves 200 px, so the window is
+        // capped, but the remembered size stays 800 tall and the next show uses it again.
+        let remembered = drag_popup_size((420.0, 520.0), (0, 0), (0, 280), 1.0);
+        assert_eq!(remembered, (420.0, 800.0));
+        let low = (0, 0, 1920, 200);
+        assert_eq!(fit_size_to_area((420, 800), low), (420, 200));
+        assert_eq!(fit_size_to_area((420, 800), (0, 0, 1920, 1040)), (420, 800));
     }
 
     #[test]
-    fn fit_from_origin_never_goes_negative() {
-        assert_eq!(fit_size_from_origin((600, 400), (5000, 5000), (0, 0, 1920, 1040)), (0, 0));
+    fn drag_window_fit_never_gives_a_zero_size() {
+        // Origin far beyond the bottom-right corner: the window is pulled back on screen.
+        let (size, pos) = drag_window_fit((420, 520), (5000, 5000), (0, 0, 1920, 1040));
+        assert!(size.0 >= 1 && size.1 >= 1);
+        assert!(pos.0 + size.0 <= 1920 && pos.1 + size.1 <= 1040);
+        // A zero-sized work area still gives at least 1x1.
+        let (size, _) = drag_window_fit((420, 520), (0, 0), (0, 0, 0, 0));
+        assert_eq!(size, (1, 1));
+    }
+
+    #[test]
+    fn drag_window_fit_keeps_the_minimum_when_there_is_room() {
+        let (size, pos) = drag_window_fit((320, 300), (100, 100), (0, 0, 1920, 1040));
+        assert_eq!((size, pos), ((320, 300), (100, 100)));
+    }
+
+    #[test]
+    fn drag_window_fit_lets_a_smaller_area_win_over_the_minimum() {
+        // The work area is 300x200, smaller than the 320x300 minimum: the area wins.
+        let (size, pos) = drag_window_fit((320, 300), (0, 0), (0, 0, 300, 200));
+        assert_eq!((size, pos), ((300, 200), (0, 0)));
+    }
+
+    #[test]
+    fn drag_window_fit_does_not_move_a_window_inside_the_area() {
+        // The bottom edge is near the work area bottom: the size is capped, the top-left stays.
+        let (size, pos) = drag_window_fit((420, 520), (100, 900), (0, 0, 1920, 1040));
+        assert_eq!((size, pos), ((420, 140), (100, 900)));
+    }
+
+    #[test]
+    fn drag_window_fit_pulls_an_origin_off_the_top_left_back_in_before_capping() {
+        // Origin left of and above the area: it is clamped first, so the window does not overflow.
+        let (size, pos) = drag_window_fit((1200, 1200), (-500, -500), (0, 0, 1920, 1040));
+        assert_eq!(pos, (0, 0));
+        assert_eq!(size, (1200, 1040));
+    }
+
+    #[test]
+    fn drag_window_fit_handles_a_negative_origin_work_area() {
+        // Secondary monitor to the left: work area (-1920, -100, 0, 1040), origin (-1000, 100).
+        let (size, pos) = drag_window_fit((1200, 1200), (-1000, 100), (-1920, -100, 0, 1040));
+        assert_eq!((size, pos), ((1000, 940), (-1000, 100)));
     }
 }

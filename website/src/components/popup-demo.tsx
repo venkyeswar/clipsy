@@ -67,6 +67,8 @@ export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
   const playingRef = useRef(startPlaying);
   const timersRef = useRef<number[]>([]);
   const rowRefs = useRef(new Map<number, HTMLLIElement>());
+  const searchRef = useRef<HTMLInputElement>(null);
+  const trashRef = useRef<HTMLButtonElement>(null);
 
   const stopAutoplay = useCallback(() => {
     if (!playingRef.current) return;
@@ -161,6 +163,8 @@ export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
         if (next) {
           select(next.id);
           focusRow(next.id);
+        } else {
+          searchRef.current?.focus();
         }
         break;
       }
@@ -192,6 +196,7 @@ export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
           <div className="relative">
             <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              ref={searchRef}
               type="search"
               aria-label="Search clipboard history"
               placeholder="Search clipboard history"
@@ -227,6 +232,7 @@ export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
                 ))}
               </TabsList>
               <Button
+                ref={trashRef}
                 type="button"
                 variant="ghost"
                 size="icon-lg"
@@ -303,7 +309,10 @@ export function PopupDemo({ autoplay = true }: { autoplay?: boolean }) {
         </p>
 
         <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-          <AlertDialogContent size="sm">
+          <AlertDialogContent
+            size="sm"
+            finalFocus={() => (canClear ? trashRef.current : searchRef.current)}
+          >
             <AlertDialogHeader>
               <AlertDialogTitle>{`Clear ${meta.clear}?`}</AlertDialogTitle>
               <AlertDialogDescription>

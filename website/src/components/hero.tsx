@@ -24,14 +24,14 @@ export function Hero() {
   let primary: ReactNode;
   if (status === "loading") {
     primary = (
-      <div className="h-11 w-60 max-w-full">
+      <div className="h-11 w-full sm:w-72">
         <Skeleton className="h-full w-full rounded-lg" />
         <span className="sr-only">Loading the latest release</span>
       </div>
     );
   } else if (latest && debUrl) {
     primary = (
-      <Button size="lg" className="h-11 px-5 text-base hover:brightness-95" render={<a href={debUrl} />}>
+      <Button size="lg" className="h-11 w-full px-5 text-base hover:brightness-95 sm:w-72" render={<a href={debUrl} />}>
         Download .deb v{latest.version}
       </Button>
     );
@@ -39,7 +39,7 @@ export function Hero() {
     primary = (
       <Button
         size="lg"
-        className="h-11 px-5 text-base hover:brightness-95"
+        className="h-11 w-full px-5 text-base hover:brightness-95 sm:w-72"
         render={<a href={releasesUrl} target="_blank" rel="noopener" />}
       >
         View on GitHub
@@ -86,12 +86,9 @@ export function Hero() {
           </Button>
         </div>
 
-        {latest && (
-          <p className="text-sm text-muted-foreground">
-            Version {latest.version}
-            {releaseDate ? `, released ${releaseDate}` : ""}.
-          </p>
-        )}
+        <p data-testid="version-line" className="min-h-5 text-sm text-muted-foreground">
+          {latest ? `Version ${latest.version}${releaseDate ? `, released ${releaseDate}` : ""}.` : null}
+        </p>
 
         <a
           href="#install"

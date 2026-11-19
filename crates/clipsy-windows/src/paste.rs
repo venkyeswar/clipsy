@@ -30,7 +30,7 @@ pub(crate) mod win {
     use std::ffi::c_void;
     use std::time::{Duration, Instant};
 
-    use anyhow::{ensure, Result};
+    use anyhow::{bail, Result};
     use windows::core::PWSTR;
     use windows::Win32::Foundation::{CloseHandle, HWND};
     use windows::Win32::System::Threading::{
@@ -45,7 +45,7 @@ pub(crate) mod win {
         GetForegroundWindow, GetWindowThreadProcessId, IsWindow, SetForegroundWindow,
     };
 
-    use super::{key_sequence, VK_CONTROL, VK_SHIFT};
+    use super::{key_sequence, release_sequence, VK_CONTROL, VK_SHIFT};
 
     /// How long to wait for the target window to become the foreground window.
     pub(crate) const FOCUS_TIMEOUT: Duration = Duration::from_millis(500);
@@ -137,32 +137,47 @@ pub(crate) mod win {
         })
     }
 
-    /// Send the paste chord (Ctrl+V, or Ctrl+Shift+V when `terminal`) with SendInput.
-    pub(crate) fn send_chord(terminal: bool) -> Result<()> {
-        let inputs: Vec<INPUT> = key_sequence(terminal)
-            .into_iter()
-            .map(|(vk, down)| INPUT {
-                r#type: INPUT_KEYBOARD,
-                Anonymous: INPUT_0 {
-                    ki: KEYBDINPUT {
-                        wVk: VIRTUAL_KEY(vk),
-                        wScan: 0,
-                        dwFlags: if down { KEYBD_EVENT_FLAGS(0) } else { KEYEVENTF_KEYUP },
-                        time: 0,
-                        dwExtraInfo: 0,
-                    },
+    /// One keyboard INPUT for a key-down (`down == true`) or key-up event.
+    fn key_input(vk: u16, down: bool) -> INPUT {
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VIRTUAL_KEY(vk),
+                    wScan: 0,
+                    dwFlags: if down { KEYBD_EVENT_FLAGS(0) } else { KEYEVENTF_KEYUP },
+                    time: 0,
+                    dwExtraInfo: 0,
                 },
-            })
-            .collect();
+            },
+        }
+    }
+
+    /// Hand `events` to SendInput in one batch. Returns how many events were injected.
+    fn send_events(events: &[(u16, bool)]) -> Result<usize> {
+        let inputs: Vec<INPUT> = events.iter().map(|&(vk, down)| key_input(vk, down)).collect();
         let size = i32::try_from(std::mem::size_of::<INPUT>())?;
         // SAFETY: `inputs` is a valid slice of INPUT values, and `size` is the size of one INPUT.
-        let sent = unsafe { SendInput(&inputs, size) } as usize;
-        ensure!(
-            sent == inputs.len(),
+        Ok(unsafe { SendInput(&inputs, size) } as usize)
+    }
+
+    /// Send the paste chord (Ctrl+V, or Ctrl+Shift+V when `terminal`) with SendInput.
+    ///
+    /// If only part of the chord is injected, the keys that did go down are released again
+    /// before the error is returned, so no modifier stays stuck.
+    pub(crate) fn send_chord(terminal: bool) -> Result<()> {
+        let events = key_sequence(terminal);
+        let sent = send_events(&events)?;
+        if sent == events.len() {
+            return Ok(());
+        }
+        // Key-ups for keys that were never pressed are harmless, so release the whole chord.
+        let released = send_events(&release_sequence(terminal)).unwrap_or(0);
+        tracing::warn!("SendInput sent {sent} of {} paste key events; released {released}", events.len());
+        bail!(
             "SendInput sent {sent} of {} key events (the target window may be running as administrator)",
-            inputs.len()
-        );
-        Ok(())
+            events.len()
+        )
     }
 
     /// Call `done` every `every` until it returns true or `timeout` passes. Returns the last result.
@@ -190,9 +205,29 @@ pub(crate) mod win {
     }
 }
 
+/// Key-up events that release every key a paste chord may have pressed: V, then Shift
+/// (terminal only), then Ctrl. Sent after a partly failed SendInput so no key stays held.
+pub fn release_sequence(terminal: bool) -> Vec<(u16, bool)> {
+    // The up events of the chord, already in reverse order of the downs.
+    key_sequence(terminal).into_iter().filter(|&(_, down)| !down).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn release_sequence_normal_releases_v_then_ctrl() {
+        assert_eq!(release_sequence(false), vec![(0x56, false), (0x11, false)]);
+    }
+
+    #[test]
+    fn release_sequence_terminal_releases_v_shift_ctrl() {
+        assert_eq!(
+            release_sequence(true),
+            vec![(0x56, false), (0x10, false), (0x11, false)]
+        );
+    }
 
     #[test]
     fn key_sequence_normal_is_ctrl_v() {

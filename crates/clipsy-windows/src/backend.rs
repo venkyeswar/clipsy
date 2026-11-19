@@ -9,6 +9,7 @@ use std::ffi::c_void;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Mutex, PoisonError};
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use clipsy_backends::{Backend, HotkeyAction, PasteMode};
@@ -52,17 +53,20 @@ struct HotkeyThread {
 }
 
 impl HotkeyThread {
-    /// Queue a command and wake the hotkey thread. False when the thread has stopped.
+    /// Queue a command and wake the hotkey thread. False when the command could not be queued
+    /// or the wake-up message was refused (the thread is gone or its queue is unusable).
     fn send(&self, cmd: HotkeyCommand) -> bool {
         if self.commands.send(cmd).is_err() {
             return false;
         }
-        // SAFETY: PostThreadMessageW only queues a message for the hotkey thread. A failure means
-        // the thread is gone; the command is then never read and its reply channel reports it.
-        let _ = unsafe { PostThreadMessageW(self.thread_id, WM_HOTKEY_COMMAND, WPARAM(0), LPARAM(0)) };
-        true
+        // SAFETY: PostThreadMessageW only queues a message for the hotkey thread. An error means
+        // the wake-up was not delivered, so the caller must not wait for a reply.
+        unsafe { PostThreadMessageW(self.thread_id, WM_HOTKEY_COMMAND, WPARAM(0), LPARAM(0)) }.is_ok()
     }
 }
+
+/// How long `bind` waits for the hotkey thread to answer before giving up.
+const HOTKEY_REPLY_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Windows implementation of [`Backend`].
 pub struct WindowsBackend {
@@ -112,9 +116,11 @@ impl WindowsBackend {
         if !hotkeys.send(HotkeyCommand::Register { action, accel: parsed, reply }) {
             bail!("the hotkey thread has stopped, so shortcuts cannot be used");
         }
-        match answer.recv() {
+        match answer.recv_timeout(HOTKEY_REPLY_TIMEOUT) {
             Ok(true) => Ok(()),
-            _ => Err(taken()),
+            Ok(false) => Err(taken()),
+            // Timed out or the thread dropped the reply: not a conflict, the thread is unresponsive.
+            Err(_) => bail!("the hotkey thread did not answer, so shortcut {accel} was not changed"),
         }
     }
 
@@ -265,6 +271,9 @@ impl Backend for WindowsBackend {
         clipboard::write_formats(formats)
     }
 
+    /// Remember the window that has focus now, unless it is Clipsy's own. When Clipsy's own window
+    /// is in front, the previous target is kept. So after focusing Clipsy's settings window, the
+    /// paste target is still the older app, not the one the user last looked at.
     fn remember_active_window(&self) {
         let fg = foreground_window();
         // Clipsy's own window (a popup already open) is not a paste target: keep the old one.
@@ -287,19 +296,19 @@ impl Backend for WindowsBackend {
             bail!("Clipsy's own window is the paste target, so nothing was pasted");
         }
 
-        let focused = focus_and_wait(target);
-        if !focused {
-            tracing::warn!("windows paste: target window did not become active in time, pasting anyway");
+        // Keys sent while the popup or another window still has focus would land in that window.
+        if !focus_and_wait(target) {
+            bail!("the target window did not take focus, so nothing was pasted");
         }
         // A key still held by the user (Shift from Shift+Enter, say) would be added to our chord.
-        if modifiers_held() {
-            wait_until(MODIFIER_TIMEOUT, POLL_EVERY, || !modifiers_held());
+        if modifiers_held() && !wait_until(MODIFIER_TIMEOUT, POLL_EVERY, || !modifiers_held()) {
+            tracing::warn!("windows paste: a modifier is still held after {MODIFIER_TIMEOUT:?}, pasting anyway");
         }
 
         let terminal = mode == PasteMode::Terminal
             || exe_name(target).is_some_and(|exe| is_terminal(&exe, &self.terminal_apps()));
         tracing::info!(
-            "windows paste: window={:#x} terminal={terminal} focused={focused} keys={}",
+            "windows paste: window={:#x} terminal={terminal} keys={}",
             to_raw(target),
             if terminal { "Ctrl+Shift+V" } else { "Ctrl+V" },
         );

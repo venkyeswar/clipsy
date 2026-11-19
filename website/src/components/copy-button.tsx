@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { cn } from "cn";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -45,10 +47,24 @@ export function CopyButton({ text, label = "Copy command" }: { text: string; lab
       variant="ghost"
       size="icon"
       aria-label={label}
-      className="size-11 shrink-0"
+      className={cn(
+        "size-11 shrink-0 text-muted-foreground hover:text-foreground",
+        copied && "text-secondary-accent hover:text-secondary-accent",
+      )}
       onClick={handleClick}
     >
-      <Icon aria-hidden="true" />
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={copied ? "check" : "copy"}
+          initial={{ scale: 0.4, opacity: 0, rotate: copied ? -45 : 0 }}
+          animate={{ scale: 1, opacity: 1, rotate: 0 }}
+          exit={{ scale: 0.4, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 500, damping: 28 }}
+          className="inline-flex"
+        >
+          <Icon aria-hidden="true" className="size-4" />
+        </motion.span>
+      </AnimatePresence>
     </Button>
   );
 }

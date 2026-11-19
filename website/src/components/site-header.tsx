@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Menu, Monitor, Moon, Sun } from "lucide-react";
+import { Download, Menu, Monitor, Moon, Sun } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,6 +23,7 @@ import { useTheme, type Theme } from "@/components/theme-provider";
 const sectionLinks = [
   { href: "#install", label: "Install" },
   { href: "#downloads", label: "Downloads" },
+  { href: "#features", label: "Features" },
   { href: "#help", label: "Help" },
 ];
 
@@ -52,7 +54,18 @@ function ThemeToggle() {
           />
         }
       >
-        <Icon aria-hidden="true" />
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.span
+            key={theme}
+            initial={{ rotate: -90, scale: 0.5, opacity: 0 }}
+            animate={{ rotate: 0, scale: 1, opacity: 1 }}
+            exit={{ rotate: 90, scale: 0.5, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 26 }}
+            className="inline-flex"
+          >
+            <Icon aria-hidden="true" className="size-4" />
+          </motion.span>
+        </AnimatePresence>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuRadioGroup
@@ -106,28 +119,28 @@ export function SiteHeader() {
   const active = useActiveSection(trackedSectionIds);
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-2 px-4">
+    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
+      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
         <a
           href="#top"
-          className="flex items-center gap-2 font-heading text-lg font-semibold tracking-tight"
+          className="-ml-1 flex min-h-11 items-center gap-2 rounded-lg px-1 font-heading text-lg font-semibold tracking-[-0.02em]"
         >
           <img
             src={`${import.meta.env.BASE_URL}logo.svg`}
             alt=""
-            width={32}
-            height={32}
-            className="size-8"
+            width={28}
+            height={28}
+            className="size-7"
           />
           Clipsy
         </a>
 
-        <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
+        <nav aria-label="Main" className="ml-4 hidden flex-1 items-center gap-0.5 md:flex">
           {sectionLinks.map((link) => (
             <Button
               key={link.href}
               variant="ghost"
-              className="h-11"
+              className="h-11 px-3 text-muted-foreground hover:text-foreground aria-[current=location]:bg-muted aria-[current=location]:text-foreground"
               render={<a href={link.href} />}
               aria-current={active === link.href.slice(1) ? "location" : undefined}
             >
@@ -136,7 +149,7 @@ export function SiteHeader() {
           ))}
           <Button
             variant="ghost"
-            className="h-11"
+            className="h-11 px-3 text-muted-foreground hover:text-foreground"
             render={
               <a href={githubUrl} target="_blank" rel="noopener" />
             }
@@ -147,6 +160,13 @@ export function SiteHeader() {
 
         <div className="flex items-center gap-1">
           <ThemeToggle />
+          <Button
+            className="ml-1 hidden h-11 px-3.5 hover:bg-primary-hover md:inline-flex"
+            render={<a href="#downloads" />}
+          >
+            <Download aria-hidden="true" />
+            Download
+          </Button>
 
           <Sheet>
             <SheetTrigger

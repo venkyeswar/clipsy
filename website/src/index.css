@@ -9,6 +9,14 @@
     --font-heading: 'Familjen Grotesk Variable', var(--font-sans);
     --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
     --color-secondary-accent: var(--secondary-accent);
+    --color-primary-hover: var(--primary-hover);
+    --color-brand-teal: var(--brand-teal);
+    --color-brand-violet: var(--brand-violet);
+    --color-brand-yellow: var(--brand-yellow);
+    --color-brand-teal-soft: var(--brand-teal-soft);
+    --color-brand-violet-soft: var(--brand-violet-soft);
+    --color-brand-yellow-soft: var(--brand-yellow-soft);
+    --color-surface-raised: var(--surface-raised);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -50,106 +58,218 @@
 }
 
 /*
- * Clipsy palette. Hex values are the brand palette; the light accent and
- * secondary were darkened slightly so white/ink text and links pass WCAG AA.
- * Verified ratios are listed in the task report.
+ * Clipsy palette, taken from the logo (teal board, violet and yellow sheets)
+ * and the app (ember accent on the selected row and active tab).
+ *
+ * Light "Daylight": cool paper, ink text, ember used only for the primary CTA.
+ * Dark "Night shift": deep ink-indigo surfaces, luminous teal for focus/links.
+ *
+ * WCAG AA (computed): text on background/card/muted >= 4.7:1 in both themes
+ * (muted text 6.0-7.1 light, 6.4-8.0 dark; teal links 4.8-5.7 light,
+ * brand tints: teal 4.9, violet 5.8, yellow 5.2 on their soft fills in light;
+ * 8.3-10.4 dark); primary-foreground on primary 5.1 light, 7.1 dark.
  */
 :root {
-    --background: #f5f7fb;
-    --foreground: #1b1f29;
+    --background: #f3f5fc;
+    --foreground: #151935;
     --card: #ffffff;
-    --card-foreground: #1b1f29;
+    --card-foreground: #151935;
     --popover: #ffffff;
-    --popover-foreground: #1b1f29;
-    --primary: #cb3f18;
+    --popover-foreground: #151935;
+    --primary: #c63f19;
+    --primary-hover: #a93412;
     --primary-foreground: #ffffff;
-    --secondary: #e6eaf2;
-    --secondary-foreground: #1b1f29;
-    --secondary-accent: #0e7c90;
-    --muted: #e6eaf2;
-    --muted-foreground: #5d6577;
-    --accent: #e6eaf2;
-    --accent-foreground: #1b1f29;
+    --secondary: #e7eaf6;
+    --secondary-foreground: #151935;
+    --secondary-accent: #08736c;
+    --muted: #e7eaf6;
+    --muted-foreground: #4f5679;
+    --accent: #e7eaf6;
+    --accent-foreground: #151935;
     --destructive: #b42318;
-    --border: #c9cfdb;
-    --input: #7d8699;
-    --ring: #cb3f18;
-    --chart-1: #cb3f18;
-    --chart-2: #0e7c90;
-    --chart-3: #5d6577;
-    --chart-4: #9aa1b0;
-    --chart-5: #1b1f29;
+    --border: #d3d8ea;
+    --input: #8a90ad;
+    --ring: #08736c;
+    --surface-raised: #ffffff;
+    --brand-teal: #08736c;
+    --brand-violet: #5e3fc0;
+    --brand-yellow: #875d00;
+    --brand-teal-soft: #d7f3ef;
+    --brand-violet-soft: #ebe5fd;
+    --brand-yellow-soft: #fff1c9;
+    --glow-a: rgb(63 208 192 / 0.38);
+    --glow-b: rgb(169 143 242 / 0.34);
+    --sheet-violet: #a98ff2;
+    --sheet-violet-edge: #6a49c8;
+    --sheet-yellow: #ffcb45;
+    --sheet-yellow-edge: #c98a12;
+    --chart-1: #c63f19;
+    --chart-2: #08736c;
+    --chart-3: #4f5679;
+    --chart-4: #8a90ad;
+    --chart-5: #151935;
     --radius: 0.625rem;
     --sidebar: #ffffff;
-    --sidebar-foreground: #1b1f29;
-    --sidebar-primary: #cb3f18;
+    --sidebar-foreground: #151935;
+    --sidebar-primary: #c63f19;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #e6eaf2;
-    --sidebar-accent-foreground: #1b1f29;
-    --sidebar-border: #c9cfdb;
-    --sidebar-ring: #cb3f18;
+    --sidebar-accent: #e7eaf6;
+    --sidebar-accent-foreground: #151935;
+    --sidebar-border: #d3d8ea;
+    --sidebar-ring: #08736c;
 }
 
 .dark {
-    --background: #171a21;
-    --foreground: #e9ebf1;
-    --card: #20242d;
-    --card-foreground: #e9ebf1;
-    --popover: #20242d;
-    --popover-foreground: #e9ebf1;
-    --primary: #f0592b;
-    --primary-foreground: #171a21;
-    --secondary: #20242d;
-    --secondary-foreground: #e9ebf1;
-    --secondary-accent: #3fb8c9;
-    --muted: #20242d;
-    --muted-foreground: #9aa1b0;
-    --accent: #2c313c;
-    --accent-foreground: #e9ebf1;
-    --destructive: #f87171;
-    --border: #343a48;
-    --input: #6b7389;
-    --ring: #f0592b;
-    --chart-1: #f0592b;
-    --chart-2: #3fb8c9;
-    --chart-3: #9aa1b0;
-    --chart-4: #6b7389;
-    --chart-5: #e9ebf1;
-    --sidebar: #20242d;
-    --sidebar-foreground: #e9ebf1;
-    --sidebar-primary: #f0592b;
-    --sidebar-primary-foreground: #171a21;
-    --sidebar-accent: #2c313c;
-    --sidebar-accent-foreground: #e9ebf1;
-    --sidebar-border: #343a48;
-    --sidebar-ring: #f0592b;
+    --background: #10132a;
+    --foreground: #eceefa;
+    --card: #181c3a;
+    --card-foreground: #eceefa;
+    --popover: #1c2142;
+    --popover-foreground: #eceefa;
+    --primary: #ff7a50;
+    --primary-hover: #ff9370;
+    --primary-foreground: #10132a;
+    --secondary: #21264a;
+    --secondary-foreground: #eceefa;
+    --secondary-accent: #4fd8c8;
+    --muted: #21264a;
+    --muted-foreground: #a4aacb;
+    --accent: #262c55;
+    --accent-foreground: #eceefa;
+    --destructive: #ff8a80;
+    --border: #2d3360;
+    --input: #4a5288;
+    --ring: #4fd8c8;
+    --surface-raised: #1c2142;
+    --brand-teal: #4fd8c8;
+    --brand-violet: #b49df5;
+    --brand-yellow: #ffcb45;
+    --brand-teal-soft: #15343f;
+    --brand-violet-soft: #272456;
+    --brand-yellow-soft: #33301f;
+    --glow-a: rgb(63 208 192 / 0.26);
+    --glow-b: rgb(169 143 242 / 0.3);
+    --sheet-violet: #8a6fe0;
+    --sheet-violet-edge: #4f34a3;
+    --sheet-yellow: #e9b530;
+    --sheet-yellow-edge: #a8720c;
+    --chart-1: #ff7a50;
+    --chart-2: #4fd8c8;
+    --chart-3: #a4aacb;
+    --chart-4: #4a5288;
+    --chart-5: #eceefa;
+    --sidebar: #181c3a;
+    --sidebar-foreground: #eceefa;
+    --sidebar-primary: #ff7a50;
+    --sidebar-primary-foreground: #10132a;
+    --sidebar-accent: #262c55;
+    --sidebar-accent-foreground: #eceefa;
+    --sidebar-border: #2d3360;
+    --sidebar-ring: #4fd8c8;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
   body {
-    @apply bg-background text-foreground;
-    }
+    @apply bg-background text-foreground antialiased;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+  }
   html {
     @apply font-sans;
-    }
+  }
   h1, h2, h3, h4 {
     @apply font-heading;
-    }
+    text-wrap: balance;
+  }
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
-    }
+  }
 }
 
+/* Theme switch: a short colour cross-fade instead of a hard flip. */
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
   }
+  html.theme-transition,
+  html.theme-transition *,
+  html.theme-transition *::before,
+  html.theme-transition *::after {
+    transition: background-color 220ms ease, border-color 220ms ease, color 220ms ease, fill 220ms ease !important;
+  }
 }
 
 section[id] {
-  scroll-margin-top: 4.5rem;
+  scroll-margin-top: 4.25rem;
+}
+
+/* Hero backdrop: one soft two-colour glow behind the demo (depth, not decoration). */
+.hero-glow {
+  background:
+    radial-gradient(closest-side, var(--glow-a), transparent 70%) 30% 40% / 70% 70% no-repeat,
+    radial-gradient(closest-side, var(--glow-b), transparent 70%) 75% 65% / 70% 70% no-repeat;
+  filter: blur(8px);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-glow {
+    animation: glow-drift 18s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes glow-drift {
+  from { transform: translate3d(-2%, 1%, 0) scale(1); }
+  to { transform: translate3d(2%, -2%, 0) scale(1.05); }
+}
+
+/* The two coloured sheets behind the demo window, as in the logo. */
+.sheet-violet {
+  background: var(--sheet-violet);
+  box-shadow: 0 6px 0 var(--sheet-violet-edge);
+}
+.sheet-yellow {
+  background: var(--sheet-yellow);
+  box-shadow: 0 6px 0 var(--sheet-yellow-edge);
+}
+
+/* Faint dot grid that sits only behind the hero. */
+.hero-dots {
+  background-image: radial-gradient(color-mix(in oklch, var(--foreground) 14%, transparent) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 60% 70% at 70% 45%, black, transparent 75%);
+}
+
+/* Keycaps: a pressable cap with a visible bottom edge. */
+.keycap {
+  box-shadow: 0 2px 0 var(--border);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.keycap[data-pressed="true"],
+.group\/keys:hover .keycap {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 var(--border);
+}
+
+/* Shadows tinted with the theme ink rather than flat grey. */
+.shadow-float {
+  box-shadow: 0 10px 28px -12px color-mix(in oklch, var(--foreground) 45%, transparent);
+}
+.shadow-window {
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--foreground) 6%, transparent),
+    0 28px 60px -22px var(--window-shadow);
+}
+:root { --window-shadow: rgb(21 25 53 / 0.55); }
+:root.dark { --window-shadow: rgb(0 0 0 / 0.6); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

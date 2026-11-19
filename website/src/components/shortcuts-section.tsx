@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { Keycap } from "@/components/keycap";
 import { Separator } from "@/components/ui/separator";
 import { config } from "@/config";
@@ -14,26 +15,33 @@ export function ShortcutsSection() {
 
   return (
     <div>
-      <h2 className="font-heading text-2xl font-semibold tracking-tight">Keyboard shortcuts</h2>
-      <p className="mt-2 max-w-[60ch] text-muted-foreground">
+      <h2 className="font-heading text-xl font-semibold tracking-[-0.02em] sm:text-2xl">Keyboard shortcuts</h2>
+      <p className="mt-1 max-w-[60ch] text-muted-foreground">
         The shortcut opens Clipsy from anywhere. The other keys work inside the Clipsy window.
       </p>
 
-      <dl className="mt-6 rounded-xl border border-border bg-card px-4">
+      <dl className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
         {shortcuts.map((shortcut, index) => (
           <div key={shortcut.label}>
             {index > 0 && <Separator />}
-            <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <dt className="order-2 text-muted-foreground sm:order-none">{shortcut.label}</dt>
-              <dd className="flex flex-wrap items-center gap-1">
+            <div
+              className={cn(
+                "group/keys flex min-h-12 items-center justify-between gap-3 px-4 py-2 transition-colors hover:bg-muted/50",
+                index === 0 && "bg-brand-teal-soft/50 hover:bg-brand-teal-soft/70",
+              )}
+            >
+              <dt className={cn("text-sm", index === 0 ? "font-medium text-foreground" : "text-muted-foreground")}>
+                {shortcut.label}
+              </dt>
+              <dd className="flex flex-wrap items-center justify-end gap-1">
                 {shortcut.keys.map((key, keyIndex) => (
                   <span key={`${key}-${keyIndex}`} className="inline-flex items-center gap-1">
                     {keyIndex > 0 && (
-                      <span aria-hidden="true" className="text-muted-foreground">
+                      <span aria-hidden="true" className="text-xs text-muted-foreground">
                         +
                       </span>
                     )}
-                    <Keycap>{key}</Keycap>
+                    <Keycap className="h-7 min-w-7">{key}</Keycap>
                   </span>
                 ))}
               </dd>

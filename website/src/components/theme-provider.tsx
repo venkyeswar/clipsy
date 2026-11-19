@@ -60,6 +60,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [resolvedDark]);
 
   const setTheme = useCallback((next: Theme) => {
+    // Cross-fade colours for a moment (CSS skips this under reduced motion).
+    const root = document.documentElement;
+    root.classList.add("theme-transition");
+    window.setTimeout(() => root.classList.remove("theme-transition"), 260);
     setThemeState(next);
     try {
       window.localStorage.setItem(STORAGE_KEY, next);

@@ -48,7 +48,7 @@ shortcuts, send key presses or place its own windows. The extension
 | `remember_window` | – | Store the currently focused window (the paste target). Ignore it if that window is the Clipsy popup itself. |
 | `show_popup` | `position`: `cursor` / `center` | The app is about to present the popup. The next Clipsy window titled `Clipboard history` that appears within 2 s gets the steps below. |
 | `set_clipboard` | `formats`: [{`mime`, `data`}] | Become the clipboard owner. GNOME's St.Clipboard offers one mime only, so use the first match in this order: `x-special/gnome-copied-files`, `image/png`, any `image/*`, `text/plain;charset=utf-8`, `text/plain`, `text/html`. |
-| `paste` | `mode`: `normal` / `terminal` | Re-activate the remembered window. About 150 ms later, send Ctrl+V. Send Ctrl+Shift+V instead when `mode` is `terminal`, or when the window's class looks like a terminal (gnome-terminal, kgx/Console, ptyxis, tilix, alacritty, kitty, wezterm, xterm, konsole, terminator, foot). |
+| `paste` | `mode`: `normal` / `terminal` / `binary`, `terminal_apps`: [class] | Re-activate the remembered window. About 150 ms later, send Ctrl+V. Send Ctrl+Shift+V instead when `mode` is `terminal`, or (for `normal`) when the window's class looks like a terminal (gnome-terminal, kgx/Console, ptyxis, tilix, alacritty, kitty, wezterm, xterm, konsole, terminator, foot, or a class listed in `terminal_apps`). Mode `binary` (used for image items) always sends Ctrl+V, even in a terminal, so tools that read the clipboard image themselves receive it. |
 
 When the popup window appears after `show_popup`, the extension:
 1. clamps it inside the work area of the pointer's monitor

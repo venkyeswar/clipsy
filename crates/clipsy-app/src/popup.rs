@@ -559,7 +559,8 @@ impl Popup {
 
         let paste_on_select = self.state.config.borrow().general.paste_on_select;
         if paste && paste_on_select {
-            self.paste_later();
+            let kind = self.position_of(id).and_then(|pos| self.clip_at(pos)).map_or(Kind::Other, |c| c.kind);
+            self.paste_later(paste_mode_for(kind, plain));
         }
     }
 
@@ -583,14 +584,14 @@ impl Popup {
     }
 
     /// Sends Ctrl+V to the window that had focus before the popup, after a short delay.
-    fn paste_later(&self) {
+    fn paste_later(&self, mode: PasteMode) {
         let state = self.state.clone();
         glib::timeout_add_local(PASTE_DELAY, move || {
             let backend = state.backend.borrow();
             if backend.supports_paste() {
                 // Read the list at paste time, so a changed config is always used.
                 backend.set_terminal_apps(&state.config.borrow().general.terminal_apps);
-                if let Err(err) = backend.paste(PasteMode::Normal) {
+                if let Err(err) = backend.paste(mode) {
                     tracing::warn!("auto-paste failed: {err:#}");
                 }
             }
@@ -900,6 +901,15 @@ fn action_button(icon: &str, tooltip: &str) -> gtk::Button {
     button.set_tooltip_text(Some(tooltip));
     button.set_valign(gtk::Align::Center);
     button
+}
+
+/// Paste mode for an item: images use `Binary` (plain Ctrl+V even in terminals) unless the
+/// user asked for plain text; everything else keeps the normal behaviour.
+fn paste_mode_for(kind: Kind, plain: bool) -> PasteMode {
+    match kind {
+        Kind::Image if !plain => PasteMode::Binary,
+        _ => PasteMode::Normal,
+    }
 }
 
 fn kind_icon(kind: Kind) -> &'static str {
@@ -1241,5 +1251,18 @@ mod tests {
         assert_eq!(one_line(""), "(empty)");
         assert_eq!(one_line(" \n "), "(empty)");
     }
-}
 
+    #[test]
+    fn paste_mode_for_images_is_binary_unless_plain() {
+        assert_eq!(paste_mode_for(Kind::Image, false), PasteMode::Binary);
+        assert_eq!(paste_mode_for(Kind::Image, true), PasteMode::Normal);
+    }
+
+    #[test]
+    fn paste_mode_for_other_kinds_is_normal() {
+        for kind in [Kind::Text, Kind::Html, Kind::Files, Kind::Other] {
+            assert_eq!(paste_mode_for(kind, false), PasteMode::Normal);
+            assert_eq!(paste_mode_for(kind, true), PasteMode::Normal);
+        }
+    }
+}

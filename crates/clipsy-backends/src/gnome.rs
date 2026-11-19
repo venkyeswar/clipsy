@@ -334,6 +334,7 @@ impl Backend for GnomeBackend {
         let mode = match mode {
             PasteMode::Normal => "normal",
             PasteMode::Terminal => "terminal",
+            PasteMode::Binary => "binary",
         };
         let terminal_apps = self.terminal_apps.lock().unwrap_or_else(PoisonError::into_inner).clone();
         // Older extensions ignore `terminal_apps`.
@@ -500,6 +501,14 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<Value>(&l).unwrap(),
             json!({"type":"paste","mode":"normal","terminal_apps":["Code"]})
+        );
+        b.set_terminal_apps(&[]);
+        b.paste(PasteMode::Binary).unwrap();
+        l.clear();
+        lines.read_line(&mut l).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&l).unwrap(),
+            json!({"type":"paste","mode":"binary","terminal_apps":[]})
         );
 
         drop(lines);

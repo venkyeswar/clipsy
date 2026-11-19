@@ -3,7 +3,12 @@ use clipsy_core::{ClipEvent, Format};
 use std::sync::mpsc::Sender;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PasteMode { Normal, Terminal }
+pub enum PasteMode {
+    Normal,
+    Terminal,
+    /// Non-text item such as an image: always send plain Ctrl+V, even to a terminal, so tools that read the clipboard themselves receive it.
+    Binary,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HotkeyAction { TogglePopup, ClearHistory, PauseRecording }

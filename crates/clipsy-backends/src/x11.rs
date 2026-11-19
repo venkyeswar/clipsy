@@ -348,6 +348,17 @@ fn is_terminal(class: &str, extra: &[String]) -> bool {
         || extra.iter().any(|e| e.trim().eq_ignore_ascii_case(&class))
 }
 
+/// Whether paste sends Ctrl+Shift+V (true) or plain Ctrl+V (false).
+/// `Binary` items (images) always use Ctrl+V so terminals still hand the image to tools
+/// that read the clipboard themselves. Terminal mode always uses Ctrl+Shift+V.
+fn use_shift(mode: PasteMode, class: Option<&str>, extra: &[String]) -> bool {
+    match mode {
+        PasteMode::Binary => false,
+        PasteMode::Terminal => true,
+        PasteMode::Normal => class.is_some_and(|c| is_terminal(c, extra)),
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Clipboard watcher (reader side)
 // ---------------------------------------------------------------------------------------------
@@ -886,10 +897,8 @@ impl Backend for X11Backend {
     fn paste(&self, mode: PasteMode) -> Result<()> {
         let win = *self.active.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let class = win.and_then(|w| source_app(&self.ctl, self.root, w));
-        let is_term = mode == PasteMode::Terminal
-            || class.as_deref().is_some_and(|c| {
-                is_terminal(c, &self.terminal_apps.lock().unwrap_or_else(std::sync::PoisonError::into_inner))
-            });
+        let extra = self.terminal_apps.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+        let is_term = use_shift(mode, class.as_deref(), &extra);
 
         // Keys are only sent once the remembered window is really active again: before
         // that they would go to the popup (still unmapping) or to whatever window the
@@ -1176,6 +1185,32 @@ mod tests {
         ] {
             assert!(!is_terminal(class, &[]), "expected {class:?} not to be a terminal");
         }
+    }
+
+    #[test]
+    fn binary_items_never_use_shift() {
+        assert!(!use_shift(PasteMode::Binary, Some("gnome-terminal-server"), &[]));
+        assert!(!use_shift(PasteMode::Binary, None, &[]));
+    }
+
+    #[test]
+    fn normal_paste_uses_shift_only_in_terminals() {
+        assert!(use_shift(PasteMode::Normal, Some("gnome-terminal-server"), &[]));
+        assert!(!use_shift(PasteMode::Normal, Some("firefox"), &[]));
+        assert!(!use_shift(PasteMode::Normal, None, &[]));
+    }
+
+    #[test]
+    fn terminal_mode_always_uses_shift() {
+        assert!(use_shift(PasteMode::Terminal, Some("firefox"), &[]));
+        assert!(use_shift(PasteMode::Terminal, None, &[]));
+    }
+
+    #[test]
+    fn user_terminal_apps_follow_the_mode_rules() {
+        let extra = vec!["MyTool".to_string()];
+        assert!(use_shift(PasteMode::Normal, Some("mytool"), &extra));
+        assert!(!use_shift(PasteMode::Binary, Some("mytool"), &extra));
     }
 
     /// The GNOME extension (Wayland) must detect the same terminals as this backend.

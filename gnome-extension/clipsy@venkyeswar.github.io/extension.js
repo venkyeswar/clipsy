@@ -350,7 +350,7 @@ export default class ClipsyExtension extends Extension {
             this._setClipboard(msg.formats);
             break;
         case 'paste':
-            this._paste(msg.mode === 'terminal',
+            this._paste(msg.mode === 'terminal', msg.mode === 'binary',
                 Array.isArray(msg.terminal_apps) ? msg.terminal_apps : []);
             break;
         default:
@@ -529,7 +529,7 @@ export default class ClipsyExtension extends Extension {
         }
         let mime = SET_ORDER_EXACT.find(m => byMime.has(m));
         mime ??= [...byMime.keys()].find(m => m.startsWith('image/'));
-        mime ??= ['text/plain;charset=utf-8', 'text/plain', 'text/html'].find(m => byMime.has(m));
+        mime ??= ['text/uri-list', 'text/plain;charset=utf-8', 'text/plain', 'text/html'].find(m => byMime.has(m));
         if (!mime)
             return;
         try {
@@ -551,7 +551,7 @@ export default class ClipsyExtension extends Extension {
         this._remembered = win;
     }
 
-    _paste(terminalMode, terminalApps) {
+    _paste(terminalMode, binaryMode, terminalApps) {
         const win = this._remembered;
         if (win) {
             try {
@@ -561,8 +561,9 @@ export default class ClipsyExtension extends Extension {
                 this._remembered = null;
             }
         }
+        // Binary items (images) always use plain Ctrl+V, never Ctrl+Shift+V.
         let terminal = terminalMode;
-        if (!terminal && win)
+        if (!terminal && !binaryMode && win)
             terminal = isTerminalWindow(win, terminalApps);
         if (this._pasteId)
             GLib.source_remove(this._pasteId);

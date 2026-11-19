@@ -332,6 +332,17 @@ pub fn sddl_for_user(sid: &str) -> String {
     format!("D:P(A;;GA;;;{sid})(A;;GA;;;SY)")
 }
 
+/// True when `text` looks like a SID such as `S-1-5-21-1-2-3-1001`: an `S-` prefix
+/// followed only by digits and dashes. The text is embedded into an SDDL string, so
+/// anything else must be refused.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_sid_text(text: &str) -> bool {
+    match text.strip_prefix("S-") {
+        Some(rest) => !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit() || b == b'-'),
+        None => false,
+    }
+}
+
 /// SID of the current process token's user, as text (for example `S-1-5-21-...`).
 #[cfg(windows)]
 fn user_sid_string() -> anyhow::Result<String> {
@@ -388,7 +399,7 @@ fn user_sid_string() -> anyhow::Result<String> {
 
     // The text goes into the SDDL string, so accept only the SID shape
     // S-<digits and dashes>. Anything else is refused rather than embedded.
-    if !text.starts_with("S-") || !text.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
+    if !is_sid_text(&text) {
         bail!("unexpected user SID text: {text:?}");
     }
     Ok(text)
@@ -469,6 +480,20 @@ mod tests {
         assert!(sddl.contains("(A;;GA;;;S-1-5-21-1-2-3-1001)"));
         assert!(sddl.contains("(A;;GA;;;SY)"));
         assert!(!sddl.contains(";OW)"));
+    }
+
+    #[test]
+    fn accepts_real_sid_text() {
+        assert!(is_sid_text("S-1-5-21-3473395470-3281294518-677509544-1001"));
+        assert!(is_sid_text("S-1-5-18"));
+    }
+
+    #[test]
+    fn rejects_non_sid_text() {
+        assert!(!is_sid_text(""));
+        assert!(!is_sid_text("S-"));
+        assert!(!is_sid_text("1-5-21"));
+        assert!(!is_sid_text("S-1-5)(A;;GA;;;WD"));
     }
 
     #[test]

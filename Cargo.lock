@@ -837,7 +837,7 @@ dependencies = [
 
 [[package]]
 name = "clipsy-app"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "clipsy-backends",
@@ -854,7 +854,7 @@ dependencies = [
 
 [[package]]
 name = "clipsy-backends"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -867,7 +867,7 @@ dependencies = [
 
 [[package]]
 name = "clipsy-core"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -882,7 +882,7 @@ dependencies = [
 
 [[package]]
 name = "clipsy-windows"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "clipsy-backends",
